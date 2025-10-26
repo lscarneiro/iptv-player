@@ -88,14 +88,7 @@ export class MobileNavigation {
         const currentIndex = this.views.indexOf(this.currentView);
         if (currentIndex > 0) {
             const targetView = this.views[currentIndex - 1];
-            
-            // Special handling for video -> streams navigation
-            if (this.currentView === 'video' && targetView === 'streams') {
-                // Make sure we go to streams, not categories
-                this.setActiveView('streams');
-            } else {
-                this.setActiveView(targetView);
-            }
+            this.setActiveView(targetView);
         }
     }
 
@@ -125,31 +118,45 @@ export class MobileNavigation {
     updateNavigationButtons() {
         const leftBtn = document.getElementById('mobileNavLeft');
         const rightBtn = document.getElementById('mobileNavRight');
+        const mobileNav = document.getElementById('mobileNav');
         
         // Check if streams are available
         const streamsAvailable = this.hasStreamsLoaded();
-        const videoPlaying = this.hasVideoPlaying();
         
         // Update button visibility and state based on current view
         switch (this.currentView) {
             case 'categories':
+                mobileNav.style.display = 'block'; // Show navigation bar
                 leftBtn.style.visibility = 'hidden'; // Hide left arrow on first view
                 rightBtn.style.visibility = streamsAvailable ? 'visible' : 'hidden';
                 rightBtn.disabled = !streamsAvailable;
+                // Reset main container
+                const mainContainer1 = document.getElementById('mainContainer');
+                if (mainContainer1) {
+                    mainContainer1.classList.remove('nav-hidden');
+                }
                 break;
                 
             case 'streams':
+                mobileNav.style.display = 'block'; // Show navigation bar
                 leftBtn.style.visibility = 'visible';
                 leftBtn.disabled = false;
-                rightBtn.style.visibility = videoPlaying ? 'visible' : 'hidden';
-                rightBtn.disabled = !videoPlaying;
+                rightBtn.style.visibility = 'hidden'; // No right arrow for streams
+                rightBtn.disabled = true;
+                // Reset main container
+                const mainContainer2 = document.getElementById('mainContainer');
+                if (mainContainer2) {
+                    mainContainer2.classList.remove('nav-hidden');
+                }
                 break;
                 
             case 'video':
-                leftBtn.style.visibility = 'visible';
-                leftBtn.disabled = false;
-                rightBtn.style.visibility = 'hidden'; // Hide right arrow on last view
-                rightBtn.disabled = true;
+                mobileNav.style.display = 'none'; // Hide entire navigation bar for video
+                // Adjust main container when nav is hidden
+                const mainContainer = document.getElementById('mainContainer');
+                if (mainContainer) {
+                    mainContainer.classList.add('nav-hidden');
+                }
                 break;
         }
     }

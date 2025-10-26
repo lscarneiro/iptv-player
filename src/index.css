@@ -764,6 +764,13 @@ body {
         height: calc(100vh - 110px);
         display: block;
         position: relative;
+        transition: margin-top 0.3s ease, height 0.3s ease;
+    }
+
+    /* When mobile nav is hidden (video mode), adjust container */
+    .main-container.nav-hidden {
+        margin-top: 60px; /* Only header height */
+        height: calc(100vh - 60px);
     }
 
     .main-container.watching {
@@ -851,20 +858,22 @@ body {
         justify-content: center;
     }
 
-    /* Show close button on mobile video panel */
-    .video-panel-header .refresh-btn {
-        display: flex; /* Show close button on mobile */
-        background-color: #d32f2f;
+    /* Style the Change Channel button on mobile */
+    .change-channel-btn {
+        background-color: #007acc;
         color: white;
-        border-radius: 50%;
-        width: 2.5rem;
-        height: 2.5rem;
-        font-size: 1.2rem;
-        font-weight: bold;
+        border: none;
+        border-radius: 4px;
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        white-space: nowrap;
     }
     
-    .video-panel-header .refresh-btn:hover {
-        background-color: #b71c1c;
+    .change-channel-btn:hover {
+        background-color: #005a9e;
     }
 
     /* Adjust player section for mobile */
