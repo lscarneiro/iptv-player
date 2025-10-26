@@ -736,6 +736,34 @@ body {
     flex-direction: column;
 }
 
+/* Desktop styling for Change Channel button (looks like original × button) */
+.change-channel-btn {
+    background-color: #404040;
+    border: none;
+    color: white;
+    padding: 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0; /* Hide the actual text on desktop */
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.change-channel-btn:hover {
+    background-color: #505050;
+}
+
+/* Change the button text content on desktop */
+.change-channel-btn::before {
+    content: "×";
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
 @media (max-width: 768px) {
     body {
         overflow: hidden;
@@ -858,22 +886,29 @@ body {
         justify-content: center;
     }
 
-    /* Style the Change Channel button on mobile */
+    /* Override desktop styling for mobile - show "Change Channel" text */
     .change-channel-btn {
-        background-color: #007acc;
+        background-color: #007acc !important;
         color: white;
         border: none;
         border-radius: 4px;
-        padding: 0.5rem 1rem;
-        font-size: 0.9rem;
+        padding: 0.5rem 1rem !important;
+        font-size: 0.9rem !important;
         font-weight: 600;
         cursor: pointer;
         transition: background-color 0.2s;
         white-space: nowrap;
+        width: auto !important;
+        height: auto !important;
     }
     
     .change-channel-btn:hover {
-        background-color: #005a9e;
+        background-color: #005a9e !important;
+    }
+
+    /* Hide the × symbol on mobile and show the text */
+    .change-channel-btn::before {
+        content: none !important;
     }
 
     /* Adjust player section for mobile */
