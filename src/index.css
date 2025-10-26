@@ -147,16 +147,19 @@ body {
 /* 3-column layout when watching */
 .main-container.watching {
     display: grid;
-    grid-template-columns: 300px 1fr 2fr;
+    grid-template-columns: 300px 500px 1fr;
     gap: 0;
 }
 
 .main-container.watching .left-panel {
     width: auto;
+    min-width: 300px;
 }
 
 .main-container.watching .right-panel {
     flex: none;
+    width: 500px;
+    overflow: hidden;
 }
 
 .video-panel {
@@ -164,6 +167,8 @@ body {
     display: flex;
     flex-direction: column;
     border-left: 1px solid #404040;
+    width: 100%;
+    min-width: 0;
 }
 
 .video-panel-header {
@@ -185,6 +190,8 @@ body {
     display: flex;
     flex-direction: column;
     padding: 1rem;
+    width: 100%;
+    min-width: 0;
 }
 
 .video-container-large {
@@ -192,7 +199,9 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    align-items: center;
+    align-items: stretch;
+    width: 100%;
+    min-width: 0;
 }
 
 .video-player-large {
@@ -202,6 +211,8 @@ body {
     max-height: 70vh;
     background-color: #000;
     border-radius: 8px;
+    min-width: 0;
+    display: block;
 }
 
 .video-info {
@@ -406,10 +417,11 @@ body {
 .stream-item {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     padding: 1rem;
     border-bottom: 1px solid #404040;
     transition: background-color 0.2s;
+    gap: 0.75rem;
 }
 
 .stream-item:hover {
@@ -435,23 +447,29 @@ body {
 
 .stream-info {
     flex: 1;
+    min-width: 0;
 }
 
 .stream-name {
     font-weight: 500;
     margin-bottom: 0.25rem;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    line-height: 1.4;
 }
 
 .stream-id {
     font-size: 0.8rem;
     color: #888;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 .stream-icon {
     width: 40px;
     height: 40px;
     border-radius: 4px;
-    margin-right: 1rem;
+    flex-shrink: 0;
     object-fit: cover;
 }
 
@@ -464,6 +482,8 @@ body {
     cursor: pointer;
     font-size: 0.9rem;
     transition: background-color 0.2s;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .watch-btn:hover {
