@@ -39,6 +39,13 @@ export class VideoPlayer {
         fallbackLink.style.display = 'block';
         fallbackLinkLarge.style.display = 'block';
         
+        // Notify mobile navigation that video panel is ready
+        if (window.app && window.app.mobileNav) {
+            setTimeout(() => {
+                window.app.mobileNav.onVideoReady();
+            }, 100);
+        }
+        
         // Clear any previous errors
         this.hideError();
         
