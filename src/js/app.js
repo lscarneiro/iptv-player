@@ -313,7 +313,14 @@ export class IPTVApp {
             }
         }
         
-        this.loadStreams();
+        // Load streams for the new category
+        await this.loadStreams();
+        
+        // Apply any existing search term to the new category
+        const searchBox = document.getElementById('streamSearch');
+        if (searchBox && searchBox.value.trim()) {
+            await this.filterStreams(searchBox.value);
+        }
         
         // Notify mobile navigation
         this.mobileNav.onCategorySelected();
@@ -391,14 +398,40 @@ export class IPTVApp {
     async filterStreams(searchTerm) {
         const term = searchTerm.trim().toLowerCase();
         
+        // If no search term, reload original streams from cache
         if (!term) {
-            this.streamList.visibleStreams = 50;
-            this.streamList.render(this.streamList.getFilteredStreams(), this.currentCategoryName);
+            // Reload from cache to ensure we show the full category, not previously filtered results
+            await this.loadStreams(false);
             return;
         }
         
-        const filtered = this.streamList.filter(term);
-        this.streamList.render(filtered, this.currentCategoryName);
+        // Always fetch fresh streams from cache for search
+        try {
+            const cacheKey = this.currentCategory === 'all' ? 'all_streams' : `category_${this.currentCategory}`;
+            let streams = await this.storageService.getFromIndexedDB('streams', cacheKey);
+            
+            // If not in cache, need to load them first
+            if (!streams) {
+                await this.loadStreams(false);
+                streams = this.streamList.getFilteredStreams();
+            }
+            
+            // Filter by search term only
+            const filtered = streams.filter(stream => {
+                const name = stream.name ? stream.name.toLowerCase() : '';
+                return name.includes(term);
+            });
+            
+            // Show all filtered results with lazy loading (start with 50)
+            this.streamList.visibleStreams = 50;
+            // Store filtered streams so render can apply marker filter
+            // render will call: this.allStreams = filteredStreams where filteredStreams = filtered (after marker filter)
+            this.streamList.render(filtered, this.currentCategoryName);
+        } catch (error) {
+            console.error('Error filtering streams:', error);
+            // Fallback: reload streams
+            await this.loadStreams(false);
+        }
     }
 
     // Video Player
