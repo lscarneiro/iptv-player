@@ -434,9 +434,11 @@ export class IPTVApp {
     showMainInterface() {
         document.getElementById('mainContainer').style.display = 'flex';
         
-        // Show mobile navigation if on mobile
+        // Initialize mobile navigation
+        this.mobileNav.checkMobile();
         if (this.mobileNav.isMobile) {
             document.getElementById('mobileNav').style.display = 'block';
+            this.mobileNav.setActiveView('categories');
         }
     }
 }

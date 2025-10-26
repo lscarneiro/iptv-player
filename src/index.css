@@ -782,6 +782,7 @@ body {
         border: none;
         transform: translateX(100%);
         transition: transform 0.3s ease;
+        background-color: #1a1a1a;
     }
 
     .left-panel.active,
@@ -793,14 +794,30 @@ body {
     .left-panel {
         width: 100%;
         z-index: 3;
+        background-color: #2d2d2d;
     }
 
     .right-panel {
         z-index: 2;
+        background-color: #1a1a1a;
     }
 
     .video-panel {
-        z-index: 1;
+        z-index: 4; /* Highest z-index when active */
+        background-color: #1a1a1a;
+    }
+
+    /* Ensure video panel is hidden by default on mobile */
+    .video-panel:not(.active) {
+        transform: translateX(100%);
+        display: none !important;
+    }
+
+    /* When video panel is active, show it */
+    .video-panel.active {
+        display: flex !important;
+        transform: translateX(0);
+        z-index: 10; /* Ensure it's on top */
     }
 
     .settings-panel {

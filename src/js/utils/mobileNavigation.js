@@ -10,6 +10,7 @@ export class MobileNavigation {
             'video': 'Now Playing'
         };
         this.isMobile = false;
+        this.pendingVideoView = false;
         
         this.init();
     }
@@ -159,6 +160,8 @@ export class MobileNavigation {
     }
 
     updatePanelVisibility() {
+        if (!this.isMobile) return;
+        
         const leftPanel = document.getElementById('leftPanel');
         const rightPanel = document.getElementById('rightPanel');
         const videoPanel = document.getElementById('videoPanel');
@@ -177,7 +180,14 @@ export class MobileNavigation {
                 rightPanel.classList.add('active');
                 break;
             case 'video':
-                videoPanel.classList.add('active');
+                // Only show video panel if it's actually displayed
+                if (videoPanel.style.display === 'flex') {
+                    videoPanel.classList.add('active');
+                } else {
+                    // If video panel is not shown, fall back to streams
+                    rightPanel.classList.add('active');
+                    this.currentView = 'streams';
+                }
                 break;
         }
     }
@@ -191,7 +201,7 @@ export class MobileNavigation {
 
     hasVideoPlaying() {
         const videoPanel = document.getElementById('videoPanel');
-        return videoPanel && videoPanel.style.display !== 'none';
+        return videoPanel && videoPanel.style.display !== 'none' && videoPanel.style.display !== '';
     }
 
     // Called when category is selected
@@ -207,18 +217,35 @@ export class MobileNavigation {
     // Called when stream starts playing
     onStreamStarted() {
         if (this.isMobile) {
-            // Auto-navigate to video view
-            setTimeout(() => {
-                this.setActiveView('video');
-            }, 300);
+            // Just set a flag that we want to show video, actual navigation happens in onVideoReady
+            this.pendingVideoView = true;
+        }
+    }
+
+    // Called when video panel is actually ready
+    onVideoReady() {
+        if (this.isMobile && this.pendingVideoView) {
+            this.setActiveView('video');
+            this.pendingVideoView = false;
         }
     }
 
     // Called when video is closed
     onVideoClosed() {
-        if (this.isMobile && this.currentView === 'video') {
-            // Navigate back to streams
-            this.setActiveView('streams');
+        if (this.isMobile) {
+            // Reset pending video view flag
+            this.pendingVideoView = false;
+            
+            // Remove active class from video panel
+            const videoPanel = document.getElementById('videoPanel');
+            if (videoPanel) {
+                videoPanel.classList.remove('active');
+            }
+            
+            // Navigate back to streams if currently on video
+            if (this.currentView === 'video') {
+                this.setActiveView('streams');
+            }
         }
     }
 
