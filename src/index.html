@@ -48,6 +48,7 @@
                     </div>
                     <button class="refresh-btn" id="refreshCategories" title="Refresh Categories">↻</button>
                 </div>
+                <button class="nav-forward mobile-only" id="toStreamsMobile" title="Go to streams">›</button>
             </div>
             <div class="content-area" id="categoriesContainer">
                 <div class="loading">Loading categories...</div>
@@ -56,6 +57,7 @@
 
         <div class="right-panel">
             <div class="panel-header hidden">
+                <button class="nav-back mobile-only" id="backToCategoriesMobile" title="Back to categories">←</button>
                 <div class="panel-title">Streams</div>
                 <div class="stream-controls">
                     <label class="filter-checkbox">
@@ -70,6 +72,7 @@
                         <button class="refresh-btn" id="refreshStreams" title="Refresh Streams">↻</button>
                     </div>
                 </div>
+                <button class="nav-forward mobile-only" id="toVideoMobile" title="Go to video" disabled>▶</button>
             </div>
             <div class="content-area" id="streamsContainer">
                 <div class="loading">Select a category to view streams</div>
@@ -79,6 +82,7 @@
         <!-- Video panel (hidden by default) -->
         <div class="video-panel" id="videoPanel" style="display: none;">
             <div class="video-panel-header">
+                <button class="nav-back mobile-only" id="backToStreamsMobile" title="Back to streams">←</button>
                 <div class="video-panel-title" id="videoPanelTitle">Now Playing</div>
                 <button class="refresh-btn" id="closeVideoPanel" title="Close Video">×</button>
             </div>

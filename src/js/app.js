@@ -20,6 +20,8 @@ export class IPTVApp {
         this.currentCategory = null;
         this.currentCategoryName = 'All Channels';
         
+        // Mobile view state: 'categories' | 'streams' | 'video'
+        this.mobilePanel = 'categories';
         this.init();
     }
 
@@ -122,6 +124,9 @@ export class IPTVApp {
         document.getElementById('closeVideoPanel').addEventListener('click', () => {
             this.videoPlayer.closeVideoPanel();
             this.streamList.clearPlayingHighlight();
+            const toVideoBtn = document.getElementById('toVideoMobile');
+            if (toVideoBtn) toVideoBtn.disabled = true;
+            this.setMobilePanel('streams');
         });
 
         // Filter markers checkbox
@@ -141,6 +146,29 @@ export class IPTVApp {
                 this.loadStreams(false);
             }
         });
+
+        // Mobile nav buttons
+        const toStreamsBtn = document.getElementById('toStreamsMobile');
+        const backToCategoriesBtn = document.getElementById('backToCategoriesMobile');
+        const toVideoBtn = document.getElementById('toVideoMobile');
+        const backToStreamsBtn = document.getElementById('backToStreamsMobile');
+
+        if (toStreamsBtn) {
+            toStreamsBtn.addEventListener('click', () => this.setMobilePanel('streams'));
+        }
+        if (backToCategoriesBtn) {
+            backToCategoriesBtn.addEventListener('click', () => this.setMobilePanel('categories'));
+        }
+        if (toVideoBtn) {
+            toVideoBtn.addEventListener('click', () => this.setMobilePanel('video'));
+        }
+        if (backToStreamsBtn) {
+            backToStreamsBtn.addEventListener('click', () => this.setMobilePanel('streams'));
+        }
+
+        // Initialize mobile panel for small screens
+        this.updateResponsivePanel();
+        window.addEventListener('resize', () => this.updateResponsivePanel());
     }
 
     // Authentication
@@ -309,6 +337,8 @@ export class IPTVApp {
         }
         
         this.loadStreams();
+        // On mobile, navigate to streams panel
+        this.setMobilePanel('streams');
     }
 
     // Stream Management
@@ -316,6 +346,8 @@ export class IPTVApp {
         if (!this.currentCategory) return;
         
         try {
+            // Reset pagination for new loads
+            this.streamList.visibleStreams = 50;
             // Show the right panel header
             const rightPanelHeader = document.querySelector('.right-panel .panel-header');
             if (rightPanelHeader) {
@@ -359,6 +391,12 @@ export class IPTVApp {
             this.updateCategoryName();
             
             this.streamList.render(streams, this.currentCategoryName);
+
+            // Enable/disable mobile to-video button
+            const toVideoBtn = document.getElementById('toVideoMobile');
+            if (toVideoBtn) {
+                toVideoBtn.disabled = !(this.videoPlayer && this.videoPlayer.isWatching);
+            }
             
         } catch (error) {
             this.streamList.showError(`Failed to load streams: ${error.message}`);
@@ -408,6 +446,13 @@ export class IPTVApp {
             }
             
             this.videoPlayer.playStream(streamUrl, streamName);
+            // On mobile, navigate to video panel
+            this.setMobilePanel('video');
+            // Update to-video button state
+            const toVideoBtn = document.getElementById('toVideoMobile');
+            if (toVideoBtn) {
+                toVideoBtn.disabled = false;
+            }
             
         } catch (error) {
             console.error('Stream loading error:', error);
@@ -418,7 +463,45 @@ export class IPTVApp {
 
     // UI Helper Methods
     showMainInterface() {
-        document.getElementById('mainContainer').style.display = 'flex';
+        const main = document.getElementById('mainContainer');
+        main.style.display = 'flex';
+        this.updateResponsivePanel();
+    }
+
+    // Mobile helpers
+    setMobilePanel(panel) {
+        this.mobilePanel = panel;
+        this.updateResponsivePanel();
+    }
+
+    isMobile() {
+        return window.matchMedia('(max-width: 768px)').matches;
+    }
+
+    updateResponsivePanel() {
+        const main = document.getElementById('mainContainer');
+        if (!main) return;
+
+        if (!this.isMobile()) {
+            // Desktop: show 2 or 3 column layouts
+            main.classList.remove('mobile-panel-categories', 'mobile-panel-streams', 'mobile-panel-video');
+            const videoPanel = document.getElementById('videoPanel');
+            if (this.videoPlayer && this.videoPlayer.isWatching) {
+                main.classList.add('watching');
+                if (videoPanel) videoPanel.style.display = 'flex';
+            } else {
+                main.classList.remove('watching');
+                if (videoPanel) videoPanel.style.display = 'none';
+            }
+            return;
+        }
+
+        // Mobile: force single panel
+        main.classList.remove('watching');
+        main.classList.remove('mobile-panel-categories', 'mobile-panel-streams', 'mobile-panel-video');
+        if (this.mobilePanel === 'categories') main.classList.add('mobile-panel-categories');
+        if (this.mobilePanel === 'streams') main.classList.add('mobile-panel-streams');
+        if (this.mobilePanel === 'video') main.classList.add('mobile-panel-video');
     }
 }
 

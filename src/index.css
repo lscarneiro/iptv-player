@@ -249,6 +249,31 @@ body {
     display: none;
 }
 
+/* Mobile nav helpers */
+.mobile-only {
+    display: none;
+}
+
+.nav-back,
+.nav-forward {
+    background-color: #404040;
+    border: none;
+    color: #fff;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 0.5rem;
+}
+
+.nav-forward[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .panel-title {
     font-size: 1.1rem;
     font-weight: 600;
@@ -655,6 +680,12 @@ body {
     white-space: nowrap;
 }
 
+/* Infinite scroll sentinel */
+.infinite-sentinel {
+    width: 100%;
+    height: 1px;
+}
+
 @media (max-width: 768px) {
     .left-panel {
         width: 250px;
@@ -671,6 +702,42 @@ body {
     
     .info-grid {
         grid-template-columns: 1fr;
+    }
+
+    /* Show mobile controls and collapse to one panel at a time */
+    .mobile-only {
+        display: inline-flex;
+    }
+
+    .main-container {
+        display: block;
+        height: calc(100vh - 80px);
+    }
+
+    .main-container.watching {
+        display: block; /* override desktop grid */
+    }
+
+    /* Hide all panels by default on mobile; show via state classes below */
+    .left-panel,
+    .right-panel,
+    .video-panel {
+        display: none;
+    }
+
+    /* Categories view */
+    .main-container.mobile-panel-categories .left-panel {
+        display: flex;
+    }
+
+    /* Streams view */
+    .main-container.mobile-panel-streams .right-panel {
+        display: flex;
+    }
+
+    /* Video view */
+    .main-container.mobile-panel-video #videoPanel {
+        display: flex !important; /* override inline display */
     }
 }
 

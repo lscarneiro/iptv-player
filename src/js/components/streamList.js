@@ -10,6 +10,8 @@ export class StreamList {
         this.currentPlayingStreamId = null;
         this.filterMarkers = true;
         this.currentCategoryName = 'All Channels';
+        this.observer = null;
+        this.loadingMore = false;
     }
 
     setOnWatchStream(callback) {
@@ -86,7 +88,19 @@ export class StreamList {
             `;
         }
         
+        // Render list
         this.container.innerHTML = html;
+        
+        // Append infinite scroll sentinel for IntersectionObserver
+        if (hasMore) {
+            const sentinel = document.createElement('div');
+            sentinel.className = 'infinite-sentinel';
+            sentinel.id = 'streamsSentinel';
+            this.container.appendChild(sentinel);
+            this.setupObserver(sentinel);
+        } else {
+            this.disconnectObserver();
+        }
         
         // Add click listeners
         this.container.querySelectorAll('.watch-btn').forEach(btn => {
@@ -117,10 +131,13 @@ export class StreamList {
     }
 
     loadMore() {
+        if (this.loadingMore) return;
+        this.loadingMore = true;
         this.visibleStreams += 50;
         // Re-render with updated visibleStreams
         const filteredStreams = this.getFilteredStreams();
         this.render(filteredStreams, this.currentCategoryName);
+        this.loadingMore = false;
     }
 
     showLoading(message) {
@@ -183,6 +200,26 @@ export class StreamList {
                 watchBtn.textContent = 'Watch';
             }
         });
+    }
+
+    setupObserver(sentinelEl) {
+        this.disconnectObserver();
+        if (!('IntersectionObserver' in window)) return; // graceful fallback
+        this.observer = new IntersectionObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.isIntersecting) {
+                    this.loadMore();
+                }
+            }
+        }, { root: this.container, rootMargin: '0px', threshold: 1.0 });
+        this.observer.observe(sentinelEl);
+    }
+
+    disconnectObserver() {
+        if (this.observer) {
+            this.observer.disconnect();
+            this.observer = null;
+        }
     }
 }
 
