@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPTV Player</title>
+    <link rel="stylesheet" href="index.css">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+    <div class="header">
+        <h1>IPTV Player</h1>
+        <button class="settings-toggle" id="settingsToggle">Settings</button>
+    </div>
+
+    <div class="settings-panel" id="settingsPanel">
+        <div class="settings-content">
+            <div class="settings-header">
+                <h2>Settings</h2>
+                <button class="settings-close" id="settingsClose">&times;</button>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="serverUrl">Server URL</label>
+                    <input type="url" id="serverUrl" placeholder="http://your-server.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" placeholder="Your username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="Your password" required>
+                </div>
+                <button type="submit" class="btn">Connect</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="main-container" id="mainContainer" style="display: none;">
+        <div class="left-panel">
+            <div class="panel-header">
+                <div class="panel-title">Categories</div>
+                <div class="search-controls">
+                    <div class="search-input-container">
+                        <input type="text" class="search-box" id="categorySearch" placeholder="Search categories...">
+                        <button class="clear-btn hidden" id="clearCategorySearch" title="Clear search">×</button>
+                    </div>
+                    <button class="refresh-btn" id="refreshCategories" title="Refresh Categories">↻</button>
+                </div>
+            </div>
+            <div class="content-area" id="categoriesContainer">
+                <div class="loading">Loading categories...</div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="panel-header hidden">
+                <div class="panel-title">Streams</div>
+                <div class="stream-controls">
+                    <label class="filter-checkbox">
+                        <input type="checkbox" id="filterMarkersCheckbox" checked>
+                        <span>Hide markers</span>
+                    </label>
+                    <div class="search-controls">
+                        <div class="search-input-container">
+                            <input type="text" class="search-box" id="streamSearch" placeholder="Search streams...">
+                            <button class="clear-btn hidden" id="clearStreamSearch" title="Clear search">×</button>
+                        </div>
+                        <button class="refresh-btn" id="refreshStreams" title="Refresh Streams">↻</button>
+                    </div>
+                </div>
+            </div>
+            <div class="content-area" id="streamsContainer">
+                <div class="loading">Select a category to view streams</div>
+            </div>
+        </div>
+
+        <!-- Video panel (hidden by default) -->
+        <div class="video-panel" id="videoPanel" style="display: none;">
+            <div class="video-panel-header">
+                <div class="video-panel-title" id="videoPanelTitle">Now Playing</div>
+                <button class="refresh-btn" id="closeVideoPanel" title="Close Video">×</button>
+            </div>
+            <div class="video-panel-content">
+                <div id="videoPanelError" style="display: none;"></div>
+                <div class="video-container-large">
+                    <video class="video-player-large" id="videoPlayerLarge" controls></video>
+                </div>
+                <div class="video-info" id="videoInfo">
+                    <h4 id="videoInfoTitle">Stream Information</h4>
+                    <p id="videoInfoDetails">Select a stream to view details</p>
+                </div>
+                <div class="fallback-link-large" id="fallbackLinkLarge" style="display: none;">
+                    <strong>Direct Link:</strong> <a href="#" id="fallbackUrlLarge" target="_blank">Click here to open in new tab</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="player-section" id="playerSection">
+        <div class="player-header">
+            <div class="player-title" id="playerTitle">Now Playing</div>
+            <button class="player-close" id="playerClose">&times;</button>
+        </div>
+        <div class="video-container">
+            <video class="video-player" id="videoPlayer" controls></video>
+            <div class="fallback-link" id="fallbackLink" style="display: none;">
+                <strong>Direct Link:</strong> <a href="#" id="fallbackUrl" target="_blank">Click here to open in new tab</a>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

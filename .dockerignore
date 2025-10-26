@@ -1,0 +1,11 @@
+# Ignore files not needed in Docker
+node_modules/
+.git/
+*.backup
+examples/
+*.md
+README.md
+REFACTORING_SUMMARY.md
+MIGRATION_GUIDE.md
+.gitignore
+

@@ -1,0 +1,7 @@
+{
+  "name": "iptv-player",
+  "version": "1.0.0",
+  "main": "src/index.html",
+  "author": "Luiz Carneiro <lscarneiro@outlook.com>",
+  "license": "MIT"
+}
