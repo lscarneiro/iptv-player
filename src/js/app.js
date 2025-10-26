@@ -7,6 +7,7 @@ import { StreamList } from './components/streamList.js';
 import { VideoPlayer } from './components/videoPlayer.js';
 import { UserInfo } from './components/userInfo.js';
 import { SettingsPanel } from './components/settingsPanel.js';
+import { MobileNavigation } from './utils/mobileNavigation.js';
 import { debounce } from './utils/debounce.js';
 import { toggleClearButton } from './utils/domHelpers.js';
 
@@ -15,6 +16,7 @@ export class IPTVApp {
         this.storageService = new StorageService();
         this.apiService = new ApiService(null);
         this.videoPlayer = new VideoPlayer();
+        this.mobileNav = new MobileNavigation();
         
         this.categories = [];
         this.currentCategory = null;
@@ -122,6 +124,9 @@ export class IPTVApp {
         document.getElementById('closeVideoPanel').addEventListener('click', () => {
             this.videoPlayer.closeVideoPanel();
             this.streamList.clearPlayingHighlight();
+            
+            // Notify mobile navigation
+            this.mobileNav.onVideoClosed();
         });
 
         // Filter markers checkbox
@@ -309,6 +314,9 @@ export class IPTVApp {
         }
         
         this.loadStreams();
+        
+        // Notify mobile navigation
+        this.mobileNav.onCategorySelected();
     }
 
     // Stream Management
@@ -360,6 +368,9 @@ export class IPTVApp {
             
             this.streamList.render(streams, this.currentCategoryName);
             
+            // Refresh mobile navigation
+            this.mobileNav.refresh();
+            
         } catch (error) {
             this.streamList.showError(`Failed to load streams: ${error.message}`);
         }
@@ -409,6 +420,9 @@ export class IPTVApp {
             
             this.videoPlayer.playStream(streamUrl, streamName);
             
+            // Notify mobile navigation
+            this.mobileNav.onStreamStarted();
+            
         } catch (error) {
             console.error('Stream loading error:', error);
             this.videoPlayer.showError(`Error: ${error.message}`);
@@ -419,6 +433,11 @@ export class IPTVApp {
     // UI Helper Methods
     showMainInterface() {
         document.getElementById('mainContainer').style.display = 'flex';
+        
+        // Show mobile navigation if on mobile
+        if (this.mobileNav.isMobile) {
+            document.getElementById('mobileNav').style.display = 'block';
+        }
     }
 }
 

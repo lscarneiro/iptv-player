@@ -10,6 +10,45 @@ export class StreamList {
         this.currentPlayingStreamId = null;
         this.filterMarkers = true;
         this.currentCategoryName = 'All Channels';
+        this.isLoading = false;
+        this.infiniteScrollEnabled = true;
+        
+        this.setupInfiniteScroll();
+    }
+
+    setupInfiniteScroll() {
+        // Get the content area that contains the streams
+        const contentArea = this.container.parentElement;
+        if (!contentArea) return;
+
+        contentArea.addEventListener('scroll', () => {
+            if (this.isLoading || !this.infiniteScrollEnabled) return;
+            
+            const { scrollTop, scrollHeight, clientHeight } = contentArea;
+            const threshold = 200; // Load more when 200px from bottom
+            
+            if (scrollTop + clientHeight >= scrollHeight - threshold) {
+                this.loadMoreAutomatically();
+            }
+        });
+    }
+
+    loadMoreAutomatically() {
+        const filteredStreams = this.getFilteredStreams();
+        const hasMore = filteredStreams.length > this.visibleStreams;
+        
+        if (hasMore && !this.isLoading) {
+            this.isLoading = true;
+            this.visibleStreams += 50;
+            
+            // Re-render with updated visibleStreams
+            this.render(filteredStreams, this.currentCategoryName);
+            
+            // Reset loading state after a short delay
+            setTimeout(() => {
+                this.isLoading = false;
+            }, 100);
+        }
     }
 
     setOnWatchStream(callback) {
@@ -74,16 +113,26 @@ export class StreamList {
             `;
         });
         
-        // Add "Load More" button if there are more items
+        // Add loading indicator or "Load More" button if there are more items
         if (hasMore) {
             const remaining = filteredStreams.length - this.visibleStreams;
-            html += `
-                <div class="load-more-container">
-                    <button class="load-more-btn" id="loadMoreStreams">
-                        Load More (${remaining} remaining)
-                    </button>
-                </div>
-            `;
+            
+            if (this.isLoading) {
+                html += `
+                    <div class="load-more-container">
+                        <div class="loading">Loading more streams...</div>
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div class="load-more-container">
+                        <button class="load-more-btn" id="loadMoreStreams">
+                            Load More (${remaining} remaining)
+                        </button>
+                        <div class="load-more-hint">Or scroll down for auto-load</div>
+                    </div>
+                `;
+            }
         }
         
         this.container.innerHTML = html;
@@ -117,10 +166,19 @@ export class StreamList {
     }
 
     loadMore() {
+        if (this.isLoading) return;
+        
+        this.isLoading = true;
         this.visibleStreams += 50;
+        
         // Re-render with updated visibleStreams
         const filteredStreams = this.getFilteredStreams();
         this.render(filteredStreams, this.currentCategoryName);
+        
+        // Reset loading state
+        setTimeout(() => {
+            this.isLoading = false;
+        }, 100);
     }
 
     showLoading(message) {
@@ -134,6 +192,9 @@ export class StreamList {
     filter(searchTerm) {
         const term = searchTerm.trim().toLowerCase();
         
+        // Reset loading state when filtering
+        this.isLoading = false;
+        
         if (!term) {
             // Reset to initial state
             this.visibleStreams = 50;
@@ -146,7 +207,8 @@ export class StreamList {
             return name.includes(term);
         });
         
-        this.visibleStreams = filtered.length;
+        // Show all filtered results when searching
+        this.visibleStreams = Math.max(50, filtered.length);
         return filtered;
     }
 

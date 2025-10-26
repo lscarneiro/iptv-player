@@ -37,8 +37,17 @@
         </div>
     </div>
 
+    <!-- Mobile Navigation -->
+    <div class="mobile-nav" id="mobileNav" style="display: none;">
+        <div class="mobile-nav-content">
+            <button class="mobile-nav-btn" id="mobileNavLeft" title="Previous">‹</button>
+            <div class="mobile-nav-title" id="mobileNavTitle">Categories</div>
+            <button class="mobile-nav-btn" id="mobileNavRight" title="Next">›</button>
+        </div>
+    </div>
+
     <div class="main-container" id="mainContainer" style="display: none;">
-        <div class="left-panel">
+        <div class="left-panel active" id="leftPanel">
             <div class="panel-header">
                 <div class="panel-title">Categories</div>
                 <div class="search-controls">
@@ -54,7 +63,7 @@
             </div>
         </div>
 
-        <div class="right-panel">
+        <div class="right-panel" id="rightPanel">
             <div class="panel-header hidden">
                 <div class="panel-title">Streams</div>
                 <div class="stream-controls">

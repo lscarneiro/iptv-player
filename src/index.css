@@ -490,6 +490,14 @@ body {
     background-color: #005a9e;
 }
 
+.load-more-hint {
+    text-align: center;
+    color: #888;
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+    font-style: italic;
+}
+
 .player-section {
     position: fixed;
     bottom: 0;
@@ -655,22 +663,244 @@ body {
     white-space: nowrap;
 }
 
+/* Mobile Navigation */
+.mobile-nav {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background-color: #2d2d2d;
+    border-bottom: 1px solid #404040;
+    z-index: 1001;
+    padding: 0.5rem;
+}
+
+.mobile-nav-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 100%;
+}
+
+.mobile-nav-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: white;
+    flex: 1;
+    text-align: center;
+    margin: 0 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mobile-nav-btn {
+    background-color: #404040;
+    border: none;
+    color: white;
+    padding: 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.2rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.mobile-nav-btn:hover {
+    background-color: #505050;
+}
+
+.mobile-nav-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.mobile-nav-btn:disabled:hover {
+    background-color: #404040;
+}
+
+/* Mobile column management */
+.mobile-column {
+    display: none;
+    width: 100%;
+    height: 100%;
+}
+
+.mobile-column.active {
+    display: flex;
+    flex-direction: column;
+}
+
 @media (max-width: 768px) {
-    .left-panel {
-        width: 250px;
+    body {
+        overflow: hidden;
     }
-    
+
+    .header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        padding: 0.75rem 1rem;
+    }
+
+    .header h1 {
+        font-size: 1.2rem;
+    }
+
+    .mobile-nav {
+        display: block;
+        top: 60px; /* Below header */
+    }
+
+    .main-container {
+        margin-top: 110px; /* Header + mobile nav height */
+        height: calc(100vh - 110px);
+        display: block;
+        position: relative;
+    }
+
+    .main-container.watching {
+        display: block;
+        grid-template-columns: none;
+    }
+
+    .left-panel,
+    .right-panel,
+    .video-panel {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+    }
+
+    .left-panel.active,
+    .right-panel.active,
+    .video-panel.active {
+        transform: translateX(0);
+    }
+
+    .left-panel {
+        width: 100%;
+        z-index: 3;
+    }
+
+    .right-panel {
+        z-index: 2;
+    }
+
+    .video-panel {
+        z-index: 1;
+    }
+
     .settings-panel {
         width: 100%;
         right: -100%;
+        top: 60px; /* Below header */
+        height: calc(100vh - 60px);
     }
     
     .search-box {
-        width: 150px;
+        width: 100%;
+        min-width: 120px;
     }
     
     .info-grid {
         grid-template-columns: 1fr;
+    }
+
+    .search-controls {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: stretch;
+    }
+
+    .stream-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+
+    .filter-checkbox {
+        justify-content: center;
+    }
+
+    /* Hide desktop video panel controls on mobile */
+    .video-panel-header .refresh-btn {
+        display: none;
+    }
+
+    /* Adjust player section for mobile */
+    .player-section {
+        position: fixed;
+        top: 60px;
+        height: calc(100vh - 60px);
+        z-index: 1002;
+    }
+
+    .video-player {
+        height: 200px;
+    }
+
+    /* Ensure content areas are properly sized */
+    .content-area {
+        height: calc(100% - 80px); /* Account for panel header */
+    }
+
+    .panel-header {
+        flex-shrink: 0;
+    }
+
+    /* Better touch targets */
+    .category-item,
+    .stream-item {
+        padding: 1rem;
+        min-height: 48px;
+    }
+
+    .watch-btn {
+        padding: 0.75rem 1rem;
+        min-height: 44px;
+    }
+
+    .mobile-nav-btn {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    /* Improve scrolling on mobile */
+    .content-area {
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Better spacing for mobile */
+    .load-more-container {
+        padding: 1.5rem;
+    }
+
+    /* Hide load more hint on very small screens */
+    @media (max-width: 480px) {
+        .load-more-hint {
+            display: none;
+        }
+        
+        .header h1 {
+            font-size: 1rem;
+        }
+        
+        .mobile-nav-title {
+            font-size: 0.9rem;
+        }
     }
 }
 
