@@ -803,21 +803,20 @@ body {
     }
 
     .video-panel {
-        z-index: 4; /* Highest z-index when active */
+        z-index: 1; /* Lower z-index by default */
         background-color: #1a1a1a;
     }
 
     /* Ensure video panel is hidden by default on mobile */
     .video-panel:not(.active) {
         transform: translateX(100%);
-        display: none !important;
     }
 
     /* When video panel is active, show it */
     .video-panel.active {
         display: flex !important;
         transform: translateX(0);
-        z-index: 10; /* Ensure it's on top */
+        z-index: 10; /* Highest z-index only when active */
     }
 
     .settings-panel {
@@ -852,9 +851,20 @@ body {
         justify-content: center;
     }
 
-    /* Hide desktop video panel controls on mobile */
+    /* Show close button on mobile video panel */
     .video-panel-header .refresh-btn {
-        display: none;
+        display: flex; /* Show close button on mobile */
+        background-color: #d32f2f;
+        color: white;
+        border-radius: 50%;
+        width: 2.5rem;
+        height: 2.5rem;
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+    
+    .video-panel-header .refresh-btn:hover {
+        background-color: #b71c1c;
     }
 
     /* Adjust player section for mobile */

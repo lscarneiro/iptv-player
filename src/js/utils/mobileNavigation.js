@@ -87,14 +87,23 @@ export class MobileNavigation {
     navigateLeft() {
         const currentIndex = this.views.indexOf(this.currentView);
         if (currentIndex > 0) {
-            this.setActiveView(this.views[currentIndex - 1]);
+            const targetView = this.views[currentIndex - 1];
+            
+            // Special handling for video -> streams navigation
+            if (this.currentView === 'video' && targetView === 'streams') {
+                // Make sure we go to streams, not categories
+                this.setActiveView('streams');
+            } else {
+                this.setActiveView(targetView);
+            }
         }
     }
 
     navigateRight() {
         const currentIndex = this.views.indexOf(this.currentView);
         if (currentIndex < this.views.length - 1) {
-            this.setActiveView(this.views[currentIndex + 1]);
+            const targetView = this.views[currentIndex + 1];
+            this.setActiveView(targetView);
         }
     }
 
@@ -116,26 +125,32 @@ export class MobileNavigation {
     updateNavigationButtons() {
         const leftBtn = document.getElementById('mobileNavLeft');
         const rightBtn = document.getElementById('mobileNavRight');
-        const currentIndex = this.views.indexOf(this.currentView);
-        
-        // Disable left button if on first view
-        leftBtn.disabled = currentIndex === 0;
-        
-        // Disable right button if on last view or if streams/video not available
-        const isLastView = currentIndex === this.views.length - 1;
-        const isStreamView = this.currentView === 'streams';
-        const isVideoView = this.currentView === 'video';
         
         // Check if streams are available
         const streamsAvailable = this.hasStreamsLoaded();
         const videoPlaying = this.hasVideoPlaying();
         
-        if (this.currentView === 'categories') {
-            rightBtn.disabled = !streamsAvailable;
-        } else if (this.currentView === 'streams') {
-            rightBtn.disabled = !videoPlaying;
-        } else {
-            rightBtn.disabled = true; // Video is the last view
+        // Update button visibility and state based on current view
+        switch (this.currentView) {
+            case 'categories':
+                leftBtn.style.visibility = 'hidden'; // Hide left arrow on first view
+                rightBtn.style.visibility = streamsAvailable ? 'visible' : 'hidden';
+                rightBtn.disabled = !streamsAvailable;
+                break;
+                
+            case 'streams':
+                leftBtn.style.visibility = 'visible';
+                leftBtn.disabled = false;
+                rightBtn.style.visibility = videoPlaying ? 'visible' : 'hidden';
+                rightBtn.disabled = !videoPlaying;
+                break;
+                
+            case 'video':
+                leftBtn.style.visibility = 'visible';
+                leftBtn.disabled = false;
+                rightBtn.style.visibility = 'hidden'; // Hide right arrow on last view
+                rightBtn.disabled = true;
+                break;
         }
     }
 
@@ -146,8 +161,12 @@ export class MobileNavigation {
         // Add context for streams and video
         if (this.currentView === 'streams') {
             const streamTitle = document.querySelector('.right-panel .panel-title');
-            if (streamTitle && streamTitle.textContent !== 'Streams') {
+            if (streamTitle && streamTitle.textContent !== 'Streams' && !streamTitle.textContent.startsWith('Streams -')) {
                 title = streamTitle.textContent;
+            } else if (streamTitle && streamTitle.textContent.startsWith('Streams -')) {
+                // Extract just the category name from "Streams - CategoryName (count)"
+                const match = streamTitle.textContent.match(/Streams - (.+?) \(/);
+                title = match ? match[1] : 'Streams';
             }
         } else if (this.currentView === 'video') {
             const videoTitle = document.getElementById('videoPanelTitle');
@@ -180,14 +199,8 @@ export class MobileNavigation {
                 rightPanel.classList.add('active');
                 break;
             case 'video':
-                // Only show video panel if it's actually displayed
-                if (videoPanel.style.display === 'flex') {
-                    videoPanel.classList.add('active');
-                } else {
-                    // If video panel is not shown, fall back to streams
-                    rightPanel.classList.add('active');
-                    this.currentView = 'streams';
-                }
+                // Always show video panel when view is set to video
+                videoPanel.classList.add('active');
                 break;
         }
     }
