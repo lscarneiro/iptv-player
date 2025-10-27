@@ -31,6 +31,12 @@ export class SettingsPanel {
     }
 
     open() {
+        // Close account panel if open
+        const accountPanel = document.getElementById('accountPanel');
+        if (accountPanel) {
+            accountPanel.classList.remove('open');
+        }
+        
         this.panel.classList.add('open');
     }
 

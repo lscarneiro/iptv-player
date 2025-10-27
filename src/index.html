@@ -10,7 +10,10 @@
 <body>
     <div class="header">
         <h1>IPTV Player</h1>
-        <button class="settings-toggle" id="settingsToggle">Settings</button>
+        <div class="header-buttons">
+            <button class="header-btn" id="accountToggle">Account</button>
+            <button class="settings-toggle" id="settingsToggle">Settings</button>
+        </div>
     </div>
 
     <div class="settings-panel" id="settingsPanel">
@@ -34,6 +37,19 @@
                 </div>
                 <button type="submit" class="btn">Connect</button>
             </form>
+        </div>
+    </div>
+
+    <div class="account-panel-backdrop" id="accountPanelBackdrop"></div>
+    <div class="account-panel" id="accountPanel">
+        <div class="settings-content">
+            <div class="settings-header">
+                <h2>Account Information</h2>
+                <button class="settings-close" id="accountClose">&times;</button>
+            </div>
+            <div id="accountContent">
+                <div class="loading">Loading account information...</div>
+            </div>
         </div>
     </div>
 

@@ -62,6 +62,19 @@ export class IPTVApp {
         // Settings panel
         this.settingsPanel.setupEventListeners();
         
+        // Account panel
+        document.getElementById('accountToggle').addEventListener('click', () => {
+            this.userInfo.openAccountPanel();
+        });
+
+        document.getElementById('accountClose').addEventListener('click', () => {
+            this.userInfo.closeAccountPanel();
+        });
+
+        document.getElementById('accountPanelBackdrop').addEventListener('click', () => {
+            this.userInfo.closeAccountPanel();
+        });
+        
         // Refresh buttons
         document.getElementById('refreshCategories').addEventListener('click', () => {
             this.loadCategories(true);
