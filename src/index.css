@@ -153,13 +153,11 @@ body {
 
 .main-container.watching .left-panel {
     width: auto;
-    min-width: 300px;
 }
 
 .main-container.watching .right-panel {
     flex: none;
     width: 500px;
-    overflow: hidden;
 }
 
 .video-panel {
@@ -784,8 +782,9 @@ body {
     font-weight: bold;
 }
 
-@media (max-width: 768px) {
-    body {
+/* Mobile layout for touch devices ONLY - single column sliding panels */
+@media (pointer: coarse) {
+    body:not(.video-fullscreen) {
         overflow: hidden;
     }
 
@@ -808,56 +807,91 @@ body {
     }
 
     .main-container {
-        margin-top: 110px; /* Header + mobile nav height */
-        height: calc(100vh - 110px);
-        display: block;
-        position: relative;
-        transition: margin-top 0.3s ease, height 0.3s ease;
+        margin-top: 110px !important; /* Header + mobile nav height */
+        height: calc(100vh - 110px) !important;
+        display: block !important;
+        grid-template-columns: none !important;
+        grid-template-rows: none !important;
+        grid: none !important;
+        flex: none !important;
+        flex-direction: column !important;
+        position: relative !important;
+        transition: margin-top 0.3s ease, height 0.3s ease !important;
+        width: 100% !important;
+        max-width: 100% !important;
     }
 
     /* When mobile nav is hidden (video mode), adjust container */
     .main-container.nav-hidden {
-        margin-top: 60px; /* Only header height */
-        height: calc(100vh - 60px);
+        margin-top: 60px !important; /* Only header height */
+        height: calc(100vh - 60px) !important;
+    }
+    
+    /* Ensure watching state doesn't break mobile layout */
+    .main-container.watching.nav-hidden {
+        margin-top: 60px !important;
+        height: calc(100vh - 60px) !important;
     }
 
     .main-container.watching {
-        display: block;
-        grid-template-columns: none;
+        display: block !important;
+        grid-template-columns: none !important;
+        grid-template-rows: none !important;
+        grid: none !important;
     }
 
     .left-panel,
     .right-panel,
     .video-panel {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        border: none;
-        transform: translateX(100%);
-        transition: transform 0.3s ease;
-        background-color: #1a1a1a;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        border: none !important;
+        transform: translateX(100%) !important;
+        transition: transform 0.3s ease !important;
+        background-color: #1a1a1a !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
     }
 
     .left-panel.active,
     .right-panel.active,
     .video-panel.active {
-        transform: translateX(0);
+        transform: translateX(0) !important;
+        display: flex !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+
+    /* Hide inactive panels */
+    .left-panel:not(.active),
+    .right-panel:not(.active) {
+        display: none !important;
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
     }
 
     .left-panel {
-        width: 100%;
+        width: 100% !important;
+        min-width: 0 !important;
         z-index: 3;
         background-color: #2d2d2d;
     }
 
     .right-panel {
+        width: 100% !important;
+        min-width: 0 !important;
+        flex: none !important;
         z-index: 2;
         background-color: #1a1a1a;
     }
 
     .video-panel {
+        width: 100% !important;
+        min-width: 0 !important;
         z-index: 1; /* Lower z-index by default */
         background-color: #1a1a1a;
     }
@@ -865,6 +899,7 @@ body {
     /* Ensure video panel is hidden by default on mobile */
     .video-panel:not(.active) {
         transform: translateX(100%);
+        display: none !important;
     }
 
     /* When video panel is active, show it */
@@ -873,6 +908,7 @@ body {
         transform: translateX(0);
         z-index: 10; /* Highest z-index only when active */
     }
+
 
     .settings-panel {
         width: 100%;
@@ -958,6 +994,44 @@ body {
         padding: 1rem;
         min-height: 48px;
     }
+    
+    /* Improve contrast for category items on mobile */
+    .category-item {
+        background-color: #404040 !important;
+        color: #ffffff !important;
+        font-weight: 500 !important;
+    }
+    
+    .category-item:hover {
+        background-color: #505050 !important;
+    }
+    
+    .category-item.special {
+        background-color: #2d2d2d !important;
+        color: #ffffff !important;
+        font-weight: 600 !important;
+    }
+    
+    .category-item.special:hover {
+        background-color: #404040 !important;
+    }
+    
+    .category-item.selected {
+        background-color: #007acc !important;
+        color: #ffffff !important;
+    }
+    
+    .category-item.selected:hover {
+        background-color: #005a9e !important;
+    }
+    
+    .category-count {
+        color: #ffffff !important;
+    }
+    
+    .category-item.selected .category-count {
+        color: #ffffff !important;
+    }
 
     .watch-btn {
         padding: 0.75rem 1rem;
@@ -993,5 +1067,140 @@ body {
             font-size: 0.9rem;
         }
     }
+}
+
+/* Responsive desktop layout for non-touch screens less than 1920px */
+@media (max-width: 1919px) and (pointer: fine) {
+    .main-container {
+        display: grid;
+        grid-template-columns: 250px 1fr;
+        gap: 0;
+    }
+
+    .main-container.watching {
+        grid-template-columns: 250px 1fr 1fr;
+    }
+
+    .left-panel {
+        width: auto;
+        min-width: auto;
+    }
+
+    .main-container.watching .left-panel {
+        min-width: auto;
+    }
+
+    .main-container.watching .right-panel {
+        width: auto;
+        min-width: 300px;
+    }
+
+    .main-container.watching .video-panel {
+        width: auto;
+    }
+}
+
+/* Global fullscreen handling */
+video:-webkit-full-screen {
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 2147483647 !important;
+}
+
+video:-moz-full-screen {
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 2147483647 !important;
+}
+
+video:fullscreen {
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 2147483647 !important;
+}
+
+/* Hide UI when video is in fullscreen */
+body.video-fullscreen .header,
+body.video-fullscreen .mobile-nav {
+    display: none !important;
+}
+
+body.video-fullscreen {
+    overflow: visible !important;
+}
+
+/* In fullscreen, hide panels but keep video panel content structure */
+body.video-fullscreen .left-panel,
+body.video-fullscreen .right-panel,
+body.video-fullscreen .video-panel-header,
+body.video-fullscreen .video-info,
+body.video-fullscreen .fallback-link-large {
+    display: none !important;
+}
+
+/* Show video panel and allow video to fill screen */
+body.video-fullscreen .video-panel,
+body.video-fullscreen .video-panel.active,
+body.video-fullscreen .video-panel:not(.active) {
+    display: block !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 2147483647 !important;
+    background: black !important;
+    transform: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    width: auto !important;
+    height: auto !important;
+}
+
+/* Make video panel content fill screen - use dynamic viewport units */
+body.video-fullscreen .video-panel-content {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Show only the video container */
+body.video-fullscreen .video-container-large {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Make video fill screen - let video controls handle sizing */
+body.video-fullscreen #videoPlayerLarge,
+body.video-fullscreen .video-player-large {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    object-fit: contain !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 

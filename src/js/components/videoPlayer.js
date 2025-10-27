@@ -6,6 +6,36 @@ export class VideoPlayer {
     constructor() {
         this.hlsPlayer = null;
         this.isWatching = false;
+        
+        // Setup fullscreen handlers only once
+        if (!VideoPlayer.handlersInitialized) {
+            VideoPlayer.handlersInitialized = true;
+            // Setup fullscreen handlers after DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    this.initializeFullscreenHandlers();
+                });
+            } else {
+                this.initializeFullscreenHandlers();
+            }
+        }
+    }
+
+    initializeFullscreenHandlers() {
+        // Setup fullscreen handlers for both video players
+        const videoRegular = document.getElementById('videoPlayer');
+        const videoLarge = document.getElementById('videoPlayerLarge');
+        
+        if (videoRegular) {
+            this.setupFullscreenHandler(videoRegular);
+        } else {
+            console.warn('videoRegular not found');
+        }
+        if (videoLarge) {
+            this.setupFullscreenHandler(videoLarge);
+        } else {
+            console.warn('videoLarge not found');
+        }
     }
 
     playStream(streamUrl, streamName) {
@@ -90,15 +120,24 @@ export class VideoPlayer {
         const playerSection = document.getElementById('playerSection');
         const video = document.getElementById('videoPlayer');
         
-        playerSection.classList.remove('open');
+        // Pause and stop the video
+        if (video) {
+            video.pause();
+            video.currentTime = 0;
+            video.removeAttribute('src');
+            video.load();
+        }
         
+        // Destroy HLS player
         if (this.hlsPlayer) {
+            this.hlsPlayer.stopLoad();
+            this.hlsPlayer.detachMedia();
             this.hlsPlayer.destroy();
             this.hlsPlayer = null;
         }
         
-        video.src = '';
-        video.load();
+        playerSection.classList.remove('open');
+        this.isWatching = false;
     }
 
     closeVideoPanel() {
@@ -106,18 +145,25 @@ export class VideoPlayer {
         const videoPanel = document.getElementById('videoPanel');
         const videoLarge = document.getElementById('videoPlayerLarge');
         
-        // Hide 3-column layout
-        mainContainer.classList.remove('watching');
-        videoPanel.style.display = 'none';
+        // Pause and stop the video
+        if (videoLarge) {
+            videoLarge.pause();
+            videoLarge.currentTime = 0;
+            videoLarge.removeAttribute('src');
+            videoLarge.load();
+        }
         
+        // Destroy HLS player
         if (this.hlsPlayer) {
+            this.hlsPlayer.stopLoad();
+            this.hlsPlayer.detachMedia();
             this.hlsPlayer.destroy();
             this.hlsPlayer = null;
         }
         
-        videoLarge.src = '';
-        videoLarge.load();
-
+        // Hide 3-column layout
+        mainContainer.classList.remove('watching');
+        videoPanel.style.display = 'none';
         this.isWatching = false;
     }
 
@@ -152,6 +198,56 @@ export class VideoPlayer {
         if (playerTitle) {
             playerTitle.textContent = message;
         }
+    }
+
+    setupFullscreenHandler(videoElement) {
+        if (!videoElement) return;
+
+        const handleFullscreenChange = (e) => {
+            const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
+            
+            if (isFullscreen && (document.fullscreenElement === videoElement || document.webkitFullscreenElement === videoElement || document.mozFullScreenElement === videoElement)) {
+                // When THIS video is fullscreen, hide the app UI elements
+                document.body.classList.add('video-fullscreen');
+            } else {
+                // When exiting fullscreen, restore UI
+                document.body.classList.remove('video-fullscreen');
+            }
+        };
+
+        // Listen for fullscreen changes on the document
+        if (!VideoPlayer.fullscreenListenerAdded) {
+            VideoPlayer.fullscreenListenerAdded = true;
+            document.addEventListener('fullscreenchange', handleFullscreenChange);
+            document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+            document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+        }
+    }
+
+    // Public method to cleanup resources
+    cleanup() {
+        const videoLarge = document.getElementById('videoPlayerLarge');
+        const video = document.getElementById('videoPlayer');
+        
+        // Stop all video elements
+        [videoLarge, video].forEach(v => {
+            if (v) {
+                v.pause();
+                v.currentTime = 0;
+                v.removeAttribute('src');
+                v.load();
+            }
+        });
+        
+        // Destroy HLS player
+        if (this.hlsPlayer) {
+            this.hlsPlayer.stopLoad();
+            this.hlsPlayer.detachMedia();
+            this.hlsPlayer.destroy();
+            this.hlsPlayer = null;
+        }
+        
+        this.isWatching = false;
     }
 }
 

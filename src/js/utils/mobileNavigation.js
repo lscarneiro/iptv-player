@@ -27,7 +27,10 @@ export class MobileNavigation {
 
     checkMobile() {
         const wasMobile = this.isMobile;
-        this.isMobile = window.innerWidth <= 768;
+        // Check if device is touch-enabled (pointer: coarse)
+        const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
+        // On touch devices, always use mobile layout regardless of screen size
+        this.isMobile = isTouchDevice;
         
         if (this.isMobile !== wasMobile) {
             this.toggleMobileMode();
