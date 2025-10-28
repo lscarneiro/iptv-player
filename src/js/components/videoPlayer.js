@@ -17,6 +17,10 @@ export class VideoPlayer {
         this.streamEndDetected = false;
         this.fragmentErrors = [];
         this.maxFragmentErrors = 5;
+        this.loadingTimeout = null;
+        this.maxLoadingTime = 30000; // 30 seconds max to start playing
+        this.networkCheckInterval = null;
+        this.lastNetworkCheck = Date.now();
         
         // Setup fullscreen handlers only once
         if (!VideoPlayer.handlersInitialized) {
@@ -100,6 +104,8 @@ export class VideoPlayer {
         this.hideError();
         
         this.initializePlayer(streamUrl, videoLarge);
+        this.startLoadingTimeout();
+        this.startNetworkMonitoring();
         this.isWatching = true;
     }
 
@@ -169,8 +175,11 @@ export class VideoPlayer {
         
         this.hlsPlayer.on(Hls.Events.FRAG_LOADED, () => {
             if (!this.playbackStarted) {
+                console.log('First fragment loaded - playback starting');
                 this.playbackStarted = true;
                 this.errorRetryCount = 0; // Reset retry count on successful start
+                this.clearLoadingTimeout();
+                this.clearNetworkMonitoring();
                 this.startBufferingMonitor(videoElement);
             }
         });
@@ -188,8 +197,11 @@ export class VideoPlayer {
         
         videoElement.addEventListener('canplay', () => {
             if (!this.playbackStarted) {
+                console.log('Video can play - playback starting');
                 this.playbackStarted = true;
                 this.errorRetryCount = 0;
+                this.clearLoadingTimeout();
+                this.clearNetworkMonitoring();
                 this.startBufferingMonitor(videoElement);
             }
         });
@@ -321,8 +333,10 @@ export class VideoPlayer {
             this.hlsPlayer.stopLoad();
         }
         
-        // Stop buffering monitoring
+        // Stop all monitoring
         this.clearBufferingMonitor();
+        this.clearLoadingTimeout();
+        this.clearNetworkMonitoring();
         
         // Show the stream ended dialog
         this.showStreamEndedDialog();
@@ -422,6 +436,144 @@ export class VideoPlayer {
         }
     }
 
+    startLoadingTimeout() {
+        this.clearLoadingTimeout();
+        
+        this.loadingTimeout = setTimeout(() => {
+            if (!this.playbackStarted && this.isWatching) {
+                console.warn('Stream loading timeout - no playback started within', this.maxLoadingTime, 'ms');
+                this.handleLoadingTimeout();
+            }
+        }, this.maxLoadingTime);
+    }
+
+    clearLoadingTimeout() {
+        if (this.loadingTimeout) {
+            clearTimeout(this.loadingTimeout);
+            this.loadingTimeout = null;
+        }
+    }
+
+    startNetworkMonitoring() {
+        this.clearNetworkMonitoring();
+        
+        // Check network connectivity every 5 seconds
+        this.networkCheckInterval = setInterval(() => {
+            this.checkNetworkConnectivity();
+        }, 5000);
+    }
+
+    clearNetworkMonitoring() {
+        if (this.networkCheckInterval) {
+            clearInterval(this.networkCheckInterval);
+            this.networkCheckInterval = null;
+        }
+    }
+
+    async checkNetworkConnectivity() {
+        // Skip if playback has started successfully
+        if (this.playbackStarted) {
+            return;
+        }
+
+        try {
+            // Check if navigator.onLine is available and false
+            if (typeof navigator.onLine !== 'undefined' && !navigator.onLine) {
+                console.warn('Device reports offline status');
+                this.handleNetworkConnectivityIssue('OFFLINE');
+                return;
+            }
+
+            // Try a simple network request to detect connectivity issues
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            const response = await fetch(this.currentStreamUrl || window.location.origin, {
+                method: 'HEAD',
+                signal: controller.signal,
+                cache: 'no-cache'
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                console.warn('Network connectivity check failed:', response.status);
+                if (response.status >= 400) {
+                    this.handleNetworkConnectivityIssue('HTTP_ERROR', response.status);
+                }
+            }
+            
+        } catch (error) {
+            console.warn('Network connectivity check error:', error.message);
+            
+            // Analyze the error type
+            if (error.name === 'AbortError') {
+                this.handleNetworkConnectivityIssue('TIMEOUT');
+            } else if (error.message.includes('SSL') || error.message.includes('certificate')) {
+                this.handleNetworkConnectivityIssue('SSL_ERROR');
+            } else if (error.message.includes('CORS')) {
+                this.handleNetworkConnectivityIssue('CORS_ERROR');
+            } else {
+                this.handleNetworkConnectivityIssue('NETWORK_ERROR');
+            }
+        }
+    }
+
+    handleLoadingTimeout() {
+        this.clearLoadingTimeout();
+        this.clearNetworkMonitoring();
+        
+        // Check if we can determine the specific issue
+        if (typeof navigator.onLine !== 'undefined' && !navigator.onLine) {
+            this.handleError('NO_INTERNET', 
+                'No internet connection detected. Please check your network connection and try again.');
+        } else {
+            this.handleError('LOADING_TIMEOUT', 
+                'Stream is taking too long to load. This could be due to network issues, server problems, or the stream being offline.',
+                true);
+        }
+    }
+
+    handleNetworkConnectivityIssue(issueType, details = null) {
+        // Only handle if we haven't started playback and are still watching
+        if (this.playbackStarted || !this.isWatching) {
+            return;
+        }
+
+        this.clearLoadingTimeout();
+        this.clearNetworkMonitoring();
+
+        switch (issueType) {
+            case 'OFFLINE':
+                this.handleError('NO_INTERNET', 
+                    'Your device appears to be offline. Please check your internet connection.');
+                break;
+            case 'TIMEOUT':
+                this.handleError('NETWORK_TIMEOUT', 
+                    'Network request timed out. Your connection may be slow or unstable.',
+                    true);
+                break;
+            case 'SSL_ERROR':
+                this.handleError('SSL_ERROR', 
+                    'SSL/HTTPS connection error. This may be due to network security settings or an untrusted certificate.',
+                    true);
+                break;
+            case 'CORS_ERROR':
+                this.handleError('CORS_ERROR', 
+                    'Cross-origin request blocked. The stream server may have security restrictions.');
+                break;
+            case 'HTTP_ERROR':
+                this.handleError('HTTP_ERROR', 
+                    `Server returned error ${details}. The stream may be unavailable or require authentication.`,
+                    true);
+                break;
+            default:
+                this.handleError('NETWORK_ERROR', 
+                    'Network connectivity issues detected. Please check your connection.',
+                    true);
+        }
+    }
+
     closePlayer() {
         const playerSection = document.getElementById('playerSection');
         const video = document.getElementById('videoPlayer');
@@ -453,6 +605,8 @@ export class VideoPlayer {
         
         // Clear monitoring
         this.clearBufferingMonitor();
+        this.clearLoadingTimeout();
+        this.clearNetworkMonitoring();
         
         // Pause and stop the video
         if (videoLarge) {
@@ -490,6 +644,8 @@ export class VideoPlayer {
         
         // Stop any ongoing monitoring
         this.clearBufferingMonitor();
+        this.clearLoadingTimeout();
+        this.clearNetworkMonitoring();
         
         // Show appropriate error UI
         this.showError(message, errorType, showRetry);
@@ -500,9 +656,12 @@ export class VideoPlayer {
         const videoContainer = document.querySelector('.video-container-large');
         
         if (errorDiv) {
+            const errorClass = this.getErrorCssClass(errorType);
+            const errorIcon = this.getErrorIcon(errorType);
+            
             let errorHtml = `
-                <div class="error-container">
-                    <div class="error-icon">⚠️</div>
+                <div class="error-container ${errorClass}">
+                    <div class="error-icon">${errorIcon}</div>
                     <div class="error-content">
                         <h3 class="error-title">${this.getErrorTitle(errorType)}</h3>
                         <p class="error-message">${message}</p>
@@ -547,8 +706,72 @@ export class VideoPlayer {
                 return 'Unsupported Format';
             case 'BUFFERING_ISSUES':
                 return 'Frequent Buffering Detected';
+            case 'NO_INTERNET':
+                return 'No Internet Connection';
+            case 'LOADING_TIMEOUT':
+                return 'Loading Timeout';
+            case 'NETWORK_TIMEOUT':
+                return 'Network Timeout';
+            case 'SSL_ERROR':
+                return 'SSL/HTTPS Error';
+            case 'CORS_ERROR':
+                return 'Cross-Origin Error';
+            case 'HTTP_ERROR':
+                return 'Server Error';
+            case 'NETWORK_ERROR':
+                return 'Network Error';
             default:
                 return 'Playback Error';
+        }
+    }
+
+    getErrorCssClass(errorType) {
+        switch (errorType) {
+            case 'STREAM_ENDED':
+                return 'stream-ended';
+            case 'BUFFERING_ISSUES':
+                return 'buffering-issues';
+            case 'NO_INTERNET':
+                return 'no-internet';
+            case 'NETWORK_TIMEOUT':
+            case 'SSL_ERROR':
+            case 'CORS_ERROR':
+            case 'HTTP_ERROR':
+            case 'NETWORK_ERROR':
+            case 'LOADING_TIMEOUT':
+                return 'network-error';
+            default:
+                return '';
+        }
+    }
+
+    getErrorIcon(errorType) {
+        switch (errorType) {
+            case 'STREAM_ENDED':
+                return '📺';
+            case 'BUFFERING_ISSUES':
+                return '⏳';
+            case 'NO_INTERNET':
+                return '📶';
+            case 'NETWORK_TIMEOUT':
+            case 'LOADING_TIMEOUT':
+                return '⏰';
+            case 'SSL_ERROR':
+                return '🔒';
+            case 'CORS_ERROR':
+                return '🚫';
+            case 'HTTP_ERROR':
+                return '🌐';
+            case 'NETWORK_ERROR':
+                return '📡';
+            case 'AUTOPLAY_FAILED':
+                return '▶️';
+            case 'UNSUPPORTED':
+                return '❌';
+            case 'MEDIA_ERROR':
+                return '🎬';
+            default:
+                return '⚠️';
         }
     }
 
@@ -711,6 +934,8 @@ export class VideoPlayer {
         
         // Clear monitoring
         this.clearBufferingMonitor();
+        this.clearLoadingTimeout();
+        this.clearNetworkMonitoring();
         
         // Stop all video elements
         [videoLarge, video].forEach(v => {

@@ -412,6 +412,30 @@ body {
     color: #FFB74D;
 }
 
+/* Network error specific styling */
+.error-container.network-error {
+    background: linear-gradient(135deg, #d32f2f, #b71c1c);
+    border-color: #f44336;
+}
+
+.error-container.network-error .error-title {
+    color: #ffcdd2;
+}
+
+/* No internet specific styling */
+.error-container.no-internet {
+    background: linear-gradient(135deg, #424242, #212121);
+    border-color: #757575;
+}
+
+.error-container.no-internet .error-title {
+    color: #ffcc02;
+}
+
+.error-container.no-internet .error-icon {
+    filter: grayscale(1);
+}
+
 /* Buffering overlay */
 .buffering-overlay {
     backdrop-filter: blur(2px);
