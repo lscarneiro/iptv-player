@@ -16,7 +16,9 @@ export class VideoPlayer {
         this.bufferingEvents = [];
         this.streamEndDetected = false;
         this.fragmentErrors = [];
-        this.maxFragmentErrors = 5;
+        this.maxFragmentErrors = 8; // Increased tolerance
+        this.bufferingRecoveryAttempts = 0;
+        this.maxBufferingRecoveryAttempts = 3;
         this.loadingTimeout = null;
         this.maxLoadingTime = 30000; // 30 seconds max to start playing
         this.networkCheckInterval = null;
@@ -81,6 +83,7 @@ export class VideoPlayer {
         this.streamEndDetected = false;
         this.fragmentErrors = [];
         this.autoplayErrorShown = false;
+        this.bufferingRecoveryAttempts = 0;
         this.clearAllMonitoring();
         
         // Update UI
@@ -155,6 +158,7 @@ export class VideoPlayer {
         this.streamEndDetected = false;
         this.fragmentErrors = [];
         this.autoplayErrorShown = false;
+        this.bufferingRecoveryAttempts = 0;
     }
 
     clearAllMonitoring() {
@@ -484,6 +488,7 @@ export class VideoPlayer {
     handleMediaError(details, data, videoElement) {
         if (details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
             this.recordBufferingEvent('buffer_stalled');
+            this.attemptBufferingRecovery(videoElement);
             return;
         }
         
@@ -586,7 +591,16 @@ export class VideoPlayer {
     retryStream() {
         if (this.currentStreamUrl && this.isWatching) {
             console.log('Retrying stream:', this.currentStreamUrl);
+            
+            // Reset recovery attempts for retry
+            this.bufferingRecoveryAttempts = 0;
+            
             const videoElement = document.getElementById('videoPlayerLarge');
+            
+            // Keep video player visible during retry
+            this.hideError();
+            this.showLoadingState();
+            
             this.initializePlayer(this.currentStreamUrl, videoElement);
         }
     }
@@ -634,9 +648,56 @@ export class VideoPlayer {
             event => Date.now() - event.timestamp < 60000 // Last minute
         );
         
-        if (recentEvents.length >= 5) {
-            console.warn('Frequent buffering detected, suggesting stream reload');
+        // More lenient thresholds - try recovery before showing dialog
+        if (recentEvents.length >= 3 && this.bufferingRecoveryAttempts < this.maxBufferingRecoveryAttempts) {
+            console.warn(`Buffering issues detected (${recentEvents.length} events), attempting automatic recovery`);
+            this.attemptBufferingRecovery();
+        } else if (recentEvents.length >= 8) {
+            console.warn('Severe buffering detected after recovery attempts, suggesting manual stream reload');
             this.showBufferingIssueDialog();
+        }
+    }
+
+    attemptBufferingRecovery(videoElement = null) {
+        if (this.bufferingRecoveryAttempts >= this.maxBufferingRecoveryAttempts) {
+            console.log('Max buffering recovery attempts reached');
+            return;
+        }
+
+        this.bufferingRecoveryAttempts++;
+        console.log(`Attempting buffering recovery (attempt ${this.bufferingRecoveryAttempts}/${this.maxBufferingRecoveryAttempts})`);
+
+        const video = videoElement || document.getElementById('videoPlayerLarge');
+        
+        if (this.hlsPlayer && video) {
+            try {
+                // Try HLS-specific recovery methods
+                const currentTime = video.currentTime;
+                
+                // Method 1: Try to recover media error (handles buffering issues)
+                this.hlsPlayer.recoverMediaError();
+                
+                // Method 2: If that doesn't work, try startLoad to resume
+                setTimeout(() => {
+                    if (video.paused || video.readyState < 3) {
+                        console.log('Attempting to restart loading after recovery');
+                        this.hlsPlayer.startLoad(Math.max(0, currentTime - 5)); // Start 5 seconds back
+                    }
+                }, 1000);
+                
+                // Method 3: If still having issues, try seeking slightly
+                setTimeout(() => {
+                    if (video.paused || video.readyState < 3) {
+                        console.log('Attempting seek-based recovery');
+                        const seekTime = Math.max(0, currentTime - 2);
+                        video.currentTime = seekTime;
+                        video.play().catch(e => console.warn('Recovery play failed:', e));
+                    }
+                }, 3000);
+                
+            } catch (error) {
+                console.warn('Buffering recovery attempt failed:', error);
+            }
         }
     }
 
@@ -658,21 +719,34 @@ export class VideoPlayer {
         
         // Check if we have too many fragment errors in a short time
         if (this.fragmentErrors.length >= this.maxFragmentErrors) {
-            console.warn('Too many fragment errors detected, likely stream ended or network issues');
+            console.warn('Too many fragment errors detected, analyzing situation');
             
             // Check if errors are all the same URL (likely stream ended)
             const uniqueUrls = [...new Set(this.fragmentErrors.map(e => e.url))];
             if (uniqueUrls.length === 1 && uniqueUrls[0].includes('black.ts')) {
                 this.handleStreamEnded();
             } else if (this.playbackStarted) {
-                // Multiple different fragment errors - likely network/stream issues
-                this.handleError('STREAM_INTERRUPTED', 
-                    'Stream is experiencing connection issues. Multiple fragments failed to load.',
-                    true);
+                // Multiple different fragment errors during playback - try recovery first
+                if (this.bufferingRecoveryAttempts < this.maxBufferingRecoveryAttempts) {
+                    console.log('Fragment errors during playback - attempting recovery before giving up');
+                    this.attemptBufferingRecovery();
+                    // Clear some fragment errors to give recovery a chance
+                    this.fragmentErrors = this.fragmentErrors.slice(-3);
+                } else {
+                    this.handleError('STREAM_INTERRUPTED', 
+                        `Stream is experiencing persistent connection issues after ${this.bufferingRecoveryAttempts} recovery attempts.\n\n` +
+                        `**Fragment Errors:** ${this.fragmentErrors.length} errors in 30 seconds\n` +
+                        `**Recovery Attempts:** ${this.bufferingRecoveryAttempts}/${this.maxBufferingRecoveryAttempts} completed\n` +
+                        `**Recommendation:** Try reloading the stream or check your network connection.`,
+                        true);
+                }
             } else {
                 // Stream never started and having fragment issues
                 this.handleError('STREAM_FAILED_TO_START',
-                    'Unable to start the stream. Multiple fragments failed to load.');
+                    `Unable to start the stream after multiple fragment loading failures.\n\n` +
+                    `**Fragment Errors:** ${this.fragmentErrors.length} errors\n` +
+                    `**Possible Causes:** Network issues, server problems, or stream unavailability\n` +
+                    `**Next Steps:** Check your connection and try again, or use the direct link.`);
             }
         }
     }
@@ -873,6 +947,7 @@ export class VideoPlayer {
         this.streamEndDetected = false;
         this.fragmentErrors = [];
         this.autoplayErrorShown = false;
+        this.bufferingRecoveryAttempts = 0;
         
         // Hide error and 3-column layout
         this.hideError();
@@ -1119,9 +1194,40 @@ export class VideoPlayer {
             this.fragmentErrors = [];
             this.errorRetryCount = 0;
             this.streamEndDetected = false;
+            this.bufferingRecoveryAttempts = 0; // Reset recovery attempts
             const videoElement = document.getElementById('videoPlayerLarge');
+            
+            // Keep video player visible during reload
             this.hideError();
+            this.showLoadingState();
+            
             this.initializePlayer(this.currentStreamUrl, videoElement);
+        }
+    }
+
+    showLoadingState() {
+        const errorDiv = document.getElementById('videoPanelError');
+        const videoContainer = document.querySelector('.video-container-large');
+        
+        if (errorDiv) {
+            const loadingHtml = `
+                <div class="error-container loading-state">
+                    <div class="error-icon">⏳</div>
+                    <div class="error-content">
+                        <h3 class="error-title">Loading Stream</h3>
+                        <p class="error-message">
+                            Restarting stream playback, please wait...
+                        </p>
+                        <div class="loading-spinner"></div>
+                    </div>
+                </div>
+            `;
+            
+            errorDiv.innerHTML = loadingHtml;
+            errorDiv.style.display = 'block';
+            if (videoContainer) {
+                videoContainer.style.display = 'flex'; // Keep video visible
+            }
         }
     }
 
@@ -1205,6 +1311,7 @@ export class VideoPlayer {
         this.streamEndDetected = false;
         this.fragmentErrors = [];
         this.autoplayErrorShown = false;
+        this.bufferingRecoveryAttempts = 0;
         this.isWatching = false;
     }
 }
