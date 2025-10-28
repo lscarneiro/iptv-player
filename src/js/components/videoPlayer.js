@@ -54,6 +54,11 @@ export class VideoPlayer {
     }
 
     playStream(streamUrl, streamName) {
+        console.log('Starting new stream:', streamName, streamUrl);
+        
+        // FIRST: Completely cleanup any existing stream before starting new one
+        this.forceCleanupCurrentStream();
+        
         const videoLarge = document.getElementById('videoPlayerLarge');
         const playerSection = document.getElementById('playerSection');
         const videoPanel = document.getElementById('videoPanel');
@@ -67,14 +72,14 @@ export class VideoPlayer {
         const videoInfoTitle = document.getElementById('videoInfoTitle');
         const videoInfoDetails = document.getElementById('videoInfoDetails');
         
-        // Reset state for new stream
+        // Reset ALL state for new stream (after cleanup)
         this.currentStreamUrl = streamUrl;
         this.currentStreamName = streamName;
         this.playbackStarted = false;
         this.errorRetryCount = 0;
         this.streamEndDetected = false;
         this.fragmentErrors = [];
-        this.clearBufferingMonitor();
+        this.clearAllMonitoring();
         
         // Update UI
         playerTitle.textContent = streamName;
@@ -107,6 +112,52 @@ export class VideoPlayer {
         this.startLoadingTimeout();
         this.startNetworkMonitoring();
         this.isWatching = true;
+    }
+
+    forceCleanupCurrentStream() {
+        console.log('Force cleaning up current stream state');
+        
+        // Stop and destroy HLS player immediately
+        if (this.hlsPlayer) {
+            try {
+                this.hlsPlayer.stopLoad();
+                this.hlsPlayer.detachMedia();
+                this.hlsPlayer.destroy();
+            } catch (e) {
+                console.warn('Error destroying HLS player:', e);
+            }
+            this.hlsPlayer = null;
+        }
+        
+        // Clear all video elements
+        const videoLarge = document.getElementById('videoPlayerLarge');
+        if (videoLarge) {
+            videoLarge.pause();
+            videoLarge.currentTime = 0;
+            videoLarge.removeAttribute('src');
+            videoLarge.load();
+            // Remove any existing event listeners by cloning the element
+            const newVideoLarge = videoLarge.cloneNode(true);
+            videoLarge.parentNode.replaceChild(newVideoLarge, videoLarge);
+        }
+        
+        // Clear all monitoring and timeouts
+        this.clearAllMonitoring();
+        
+        // Hide any existing errors
+        this.hideError();
+        
+        // Reset all state flags
+        this.playbackStarted = false;
+        this.errorRetryCount = 0;
+        this.streamEndDetected = false;
+        this.fragmentErrors = [];
+    }
+
+    clearAllMonitoring() {
+        this.clearBufferingMonitor();
+        this.clearLoadingTimeout();
+        this.clearNetworkMonitoring();
     }
 
     initializePlayer(streamUrl, videoElement) {
@@ -158,19 +209,111 @@ export class VideoPlayer {
         videoElement.src = streamUrl;
         this.setupVideoEventListeners(videoElement);
         
-        videoElement.play().catch(e => {
-            console.error('Native player autoplay failed:', e);
-            this.handleError('AUTOPLAY_FAILED', 'Click the play button to start the stream.');
+        this.attemptAutoplay(videoElement, 'Native player loaded');
+    }
+
+    attemptAutoplay(videoElement, context) {
+        console.log(`Attempting autoplay: ${context}`);
+        
+        videoElement.play().then(() => {
+            console.log('Autoplay successful');
+        }).catch(e => {
+            console.error('Autoplay failed:', e);
+            this.handleAutoplayFailure(videoElement, e, context);
         });
+    }
+
+    handleAutoplayFailure(videoElement, error, context) {
+        console.warn(`Autoplay blocked (${context}):`, error.message);
+        
+        // Determine the specific reason for autoplay failure
+        let reason = 'Unknown reason';
+        let solution = 'Click the play button below to start the stream.';
+        
+        if (error.name === 'NotAllowedError') {
+            reason = 'Browser autoplay policy prevents automatic playback';
+            solution = 'Your browser requires user interaction to start video playback. Click the play button below.';
+        } else if (error.name === 'AbortError') {
+            reason = 'Playback was interrupted (possibly by another stream starting)';
+            solution = 'The previous playback was stopped. Click the play button below to start this stream.';
+        } else if (error.name === 'NotSupportedError') {
+            reason = 'Video format or codec not supported';
+            solution = 'This video format may not be supported. Try the direct link below.';
+        } else if (error.message.includes('user activation')) {
+            reason = 'User interaction required by browser policy';
+            solution = 'Modern browsers require a user click before playing video. Click the play button below.';
+        }
+        
+        this.showAutoplayBlockedDialog(videoElement, reason, solution, context);
+    }
+
+    showAutoplayBlockedDialog(videoElement, reason, solution, context) {
+        const errorDiv = document.getElementById('videoPanelError');
+        const videoContainer = document.querySelector('.video-container-large');
+        
+        if (errorDiv) {
+            const dialogHtml = `
+                <div class="error-container autoplay-blocked">
+                    <div class="error-icon">▶️</div>
+                    <div class="error-content">
+                        <h3 class="error-title">Autoplay Blocked</h3>
+                        <p class="error-message">
+                            <strong>Reason:</strong> ${reason}<br><br>
+                            <strong>Solution:</strong> ${solution}
+                        </p>
+                        <div class="error-actions">
+                            <button class="error-btn play-btn" onclick="window.app.videoPlayer.manualPlay()">
+                                ▶️ Play Stream
+                            </button>
+                            <button class="error-btn fallback-btn" onclick="document.getElementById('fallbackLinkLarge').scrollIntoView()">
+                                🔗 Direct Link
+                            </button>
+                            <button class="error-btn close-btn" onclick="window.app.videoPlayer.closeVideoPanel()">
+                                ❌ Close Player
+                            </button>
+                        </div>
+                        <div class="error-details">
+                            <small>Context: ${context}</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            errorDiv.innerHTML = dialogHtml;
+            errorDiv.style.display = 'block';
+            if (videoContainer) {
+                videoContainer.style.display = 'flex'; // Keep video visible for play button
+            }
+        }
+    }
+
+    manualPlay() {
+        const videoElement = document.getElementById('videoPlayerLarge');
+        if (videoElement) {
+            console.log('Manual play triggered by user');
+            this.hideError();
+            
+            videoElement.play().then(() => {
+                console.log('Manual play successful');
+                if (!this.playbackStarted) {
+                    this.playbackStarted = true;
+                    this.clearLoadingTimeout();
+                    this.clearNetworkMonitoring();
+                    this.startBufferingMonitor(videoElement);
+                }
+            }).catch(e => {
+                console.error('Manual play also failed:', e);
+                this.handleError('PLAYBACK_FAILED', 
+                    `Unable to start playback even with manual play. Error: ${e.message}. This may be a stream or browser compatibility issue.`,
+                    true);
+            });
+        }
     }
 
     setupHlsEventListeners(videoElement) {
         this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
             console.log('HLS manifest parsed successfully');
-            videoElement.play().catch(e => {
-                console.error('Autoplay failed:', e);
-                this.handleError('AUTOPLAY_FAILED', 'Click the play button to start the stream.');
-            });
+            this.attemptAutoplay(videoElement, 'HLS manifest loaded');
         });
         
         this.hlsPlayer.on(Hls.Events.FRAG_LOADED, () => {
@@ -264,22 +407,31 @@ export class VideoPlayer {
             return;
         }
         
+        // Create detailed error message based on the specific error
+        const errorDetails = this.analyzeNetworkError(details, data);
+        
         if (!this.playbackStarted) {
             // Stream failed to start
             if (this.errorRetryCount < this.maxRetries) {
                 this.errorRetryCount++;
-                console.log(`Retrying stream load (attempt ${this.errorRetryCount}/${this.maxRetries})`);
+                console.log(`Retrying stream load (attempt ${this.errorRetryCount}/${this.maxRetries}) after ${details}`);
                 setTimeout(() => {
                     this.retryStream();
                 }, 2000 * this.errorRetryCount); // Exponential backoff
             } else {
                 this.handleError('STREAM_FAILED_TO_START', 
-                    'Unable to start the stream. The stream may be offline or the URL is incorrect. Try the direct link below.');
+                    `Unable to start the stream after ${this.maxRetries} attempts.\n\n` +
+                    `**Error Details:** ${errorDetails.description}\n` +
+                    `**Possible Causes:** ${errorDetails.causes}\n` +
+                    `**Suggested Actions:** ${errorDetails.solutions}`);
             }
         } else {
             // Stream was playing but encountered network error
             this.handleError('STREAM_INTERRUPTED', 
-                'Stream connection lost. The stream may have ended or there\'s a network issue.',
+                `Stream connection was interrupted during playback.\n\n` +
+                `**Error Details:** ${errorDetails.description}\n` +
+                `**What Happened:** ${errorDetails.causes}\n` +
+                `**Next Steps:** ${errorDetails.solutions}`,
                 true); // Show retry option
         }
     }
@@ -340,6 +492,50 @@ export class VideoPlayer {
         
         // Show the stream ended dialog
         this.showStreamEndedDialog();
+    }
+
+    analyzeNetworkError(details, data) {
+        const response = data.response || {};
+        const url = data.url || this.currentStreamUrl || 'unknown';
+        
+        switch (details) {
+            case 'manifestLoadError':
+                return {
+                    description: `Failed to load stream manifest from ${url}`,
+                    causes: 'Server is unreachable, stream is offline, or network connectivity issues',
+                    solutions: 'Check your internet connection, verify the stream is online, or try the direct link'
+                };
+            case 'manifestLoadTimeOut':
+                return {
+                    description: 'Stream manifest request timed out',
+                    causes: 'Slow network connection, server overload, or network congestion',
+                    solutions: 'Check your network speed, try again later, or use a different network'
+                };
+            case 'fragLoadError':
+                return {
+                    description: `Failed to load video fragment (HTTP ${response.code || 'unknown'})`,
+                    causes: 'Network interruption, server issues, or stream ended unexpectedly',
+                    solutions: 'Reload the stream, check network stability, or try the direct link'
+                };
+            case 'fragLoadTimeOut':
+                return {
+                    description: 'Video fragment loading timed out',
+                    causes: 'Network congestion, slow connection, or server performance issues',
+                    solutions: 'Check network speed, try reloading, or switch to a better network'
+                };
+            case 'keyLoadError':
+                return {
+                    description: 'Failed to load decryption key for encrypted stream',
+                    causes: 'Authentication issues, DRM problems, or server configuration errors',
+                    solutions: 'Check if you have proper access rights or contact the stream provider'
+                };
+            default:
+                return {
+                    description: `Network error: ${details} (${response.code || 'no response code'})`,
+                    causes: 'Various network or server-related issues',
+                    solutions: 'Try reloading the stream, check your connection, or use the direct link'
+                };
+        }
     }
 
     retryStream() {
