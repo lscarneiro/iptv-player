@@ -15,6 +15,8 @@ export class VideoPlayer {
         this.lastBufferTime = 0;
         this.bufferingEvents = [];
         this.streamEndDetected = false;
+        this.fragmentErrors = [];
+        this.maxFragmentErrors = 5;
         
         // Setup fullscreen handlers only once
         if (!VideoPlayer.handlersInitialized) {
@@ -67,6 +69,7 @@ export class VideoPlayer {
         this.playbackStarted = false;
         this.errorRetryCount = 0;
         this.streamEndDetected = false;
+        this.fragmentErrors = [];
         this.clearBufferingMonitor();
         
         // Update UI
@@ -127,7 +130,14 @@ export class VideoPlayer {
         this.hlsPlayer = new Hls({
             enableWorker: true,
             lowLatencyMode: true,
-            backBufferLength: 90
+            backBufferLength: 90,
+            maxLoadingDelay: 4,
+            maxBufferLength: 30,
+            maxMaxBufferLength: 600,
+            fragLoadingTimeOut: 20000,
+            manifestLoadingTimeOut: 10000,
+            fragLoadingMaxRetry: 2,
+            manifestLoadingMaxRetry: 1
         });
         
         this.hlsPlayer.loadSource(streamUrl);
@@ -201,7 +211,20 @@ export class VideoPlayer {
     }
 
     handleHlsError(data, videoElement) {
-        const { type, details, fatal } = data;
+        const { type, details, fatal, frag } = data;
+        
+        // Check if this is a black.ts fragment error (stream ended)
+        if (frag && frag.url && frag.url.includes('black.ts')) {
+            console.log('Detected black.ts fragment - stream has ended');
+            this.handleStreamEnded();
+            return;
+        }
+        
+        // Check for repeated fragment load errors (potential stream ending)
+        if (details === 'fragLoadError' && !fatal) {
+            this.trackFragmentError(data);
+            return;
+        }
         
         if (fatal) {
             switch (type) {
@@ -222,6 +245,13 @@ export class VideoPlayer {
     }
 
     handleNetworkError(details, data) {
+        // Check if this is a CORS error with black.ts (stream ended)
+        if (data.frag && data.frag.url && data.frag.url.includes('black.ts')) {
+            console.log('CORS error with black.ts fragment - stream has ended');
+            this.handleStreamEnded();
+            return;
+        }
+        
         if (!this.playbackStarted) {
             // Stream failed to start
             if (this.errorRetryCount < this.maxRetries) {
@@ -279,7 +309,22 @@ export class VideoPlayer {
     }
 
     handleStreamEnded() {
+        if (this.streamEndDetected) {
+            return; // Already handled
+        }
+        
+        console.log('Stream ended - stopping player and showing dialog');
         this.streamEndDetected = true;
+        
+        // Stop the HLS player to prevent further fragment loading attempts
+        if (this.hlsPlayer) {
+            this.hlsPlayer.stopLoad();
+        }
+        
+        // Stop buffering monitoring
+        this.clearBufferingMonitor();
+        
+        // Show the stream ended dialog
         this.showStreamEndedDialog();
     }
 
@@ -340,6 +385,43 @@ export class VideoPlayer {
         }
     }
 
+    trackFragmentError(data) {
+        const now = Date.now();
+        const { frag } = data;
+        
+        // Track fragment errors
+        this.fragmentErrors.push({
+            timestamp: now,
+            url: frag ? frag.url : 'unknown',
+            details: data.details
+        });
+        
+        // Keep only recent errors (last 30 seconds)
+        this.fragmentErrors = this.fragmentErrors.filter(
+            error => now - error.timestamp < 30000
+        );
+        
+        // Check if we have too many fragment errors in a short time
+        if (this.fragmentErrors.length >= this.maxFragmentErrors) {
+            console.warn('Too many fragment errors detected, likely stream ended or network issues');
+            
+            // Check if errors are all the same URL (likely stream ended)
+            const uniqueUrls = [...new Set(this.fragmentErrors.map(e => e.url))];
+            if (uniqueUrls.length === 1 && uniqueUrls[0].includes('black.ts')) {
+                this.handleStreamEnded();
+            } else if (this.playbackStarted) {
+                // Multiple different fragment errors - likely network/stream issues
+                this.handleError('STREAM_INTERRUPTED', 
+                    'Stream is experiencing connection issues. Multiple fragments failed to load.',
+                    true);
+            } else {
+                // Stream never started and having fragment issues
+                this.handleError('STREAM_FAILED_TO_START',
+                    'Unable to start the stream. Multiple fragments failed to load.');
+            }
+        }
+    }
+
     closePlayer() {
         const playerSection = document.getElementById('playerSection');
         const video = document.getElementById('videoPlayer');
@@ -394,6 +476,7 @@ export class VideoPlayer {
         this.playbackStarted = false;
         this.errorRetryCount = 0;
         this.streamEndDetected = false;
+        this.fragmentErrors = [];
         
         // Hide error and 3-column layout
         this.hideError();
@@ -566,8 +649,11 @@ export class VideoPlayer {
     reloadStream() {
         if (this.currentStreamUrl && this.isWatching) {
             console.log('Reloading stream:', this.currentStreamUrl);
-            // Reset buffering events when manually reloading
+            // Reset error tracking when manually reloading
             this.bufferingEvents = [];
+            this.fragmentErrors = [];
+            this.errorRetryCount = 0;
+            this.streamEndDetected = false;
             const videoElement = document.getElementById('videoPlayerLarge');
             this.hideError();
             this.initializePlayer(this.currentStreamUrl, videoElement);
@@ -650,6 +736,7 @@ export class VideoPlayer {
         this.playbackStarted = false;
         this.errorRetryCount = 0;
         this.streamEndDetected = false;
+        this.fragmentErrors = [];
         this.isWatching = false;
     }
 }
