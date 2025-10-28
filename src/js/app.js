@@ -9,7 +9,7 @@ import { UserInfo } from './components/userInfo.js';
 import { SettingsPanel } from './components/settingsPanel.js';
 import { MobileNavigation } from './utils/mobileNavigation.js';
 import { debounce } from './utils/debounce.js';
-import { toggleClearButton, scrollToTop } from './utils/domHelpers.js';
+import { toggleClearButton } from './utils/domHelpers.js';
 
 export class IPTVApp {
     constructor() {
@@ -299,10 +299,12 @@ export class IPTVApp {
         this.currentCategory = categoryId;
         
         // Scroll to top of streams container on category change (especially important for mobile)
-        const streamsContainer = document.getElementById('streamsContainer');
-        if (streamsContainer) {
-            scrollToTop(streamsContainer);
-        }
+        setTimeout(() => {
+            const streamsContainer = document.getElementById('streamsContainer');
+            if (streamsContainer) {
+                streamsContainer.scrollTop = 0;
+            }
+        }, 50);
         
         // Update category count if not already loaded (exclude "All Channels")
         if (categoryId !== 'all') {

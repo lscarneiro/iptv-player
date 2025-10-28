@@ -20,7 +20,16 @@ export function toggleClearButton(buttonId, value) {
 
 // Utility function to reliably scroll an element to the top
 export function scrollToTop(element) {
-    if (!element) return;
+    if (!element) {
+        console.warn('scrollToTop: element is null or undefined');
+        return;
+    }
+    
+    // Check if element is actually scrollable
+    if (typeof element.scrollTop === 'undefined') {
+        console.warn('scrollToTop: element is not scrollable');
+        return;
+    }
     
     // Try multiple methods to ensure cross-browser compatibility
     try {
@@ -28,13 +37,13 @@ export function scrollToTop(element) {
         element.scrollTop = 0;
         
         // Method 2: Use scrollTo if available (more reliable on some mobile browsers)
-        if (element.scrollTo) {
+        if (typeof element.scrollTo === 'function') {
             element.scrollTo(0, 0);
         }
         
         // Method 3: Use scrollIntoView as fallback for stubborn cases
         const firstChild = element.firstElementChild;
-        if (firstChild && firstChild.scrollIntoView) {
+        if (firstChild && typeof firstChild.scrollIntoView === 'function') {
             firstChild.scrollIntoView({ block: 'start', inline: 'nearest' });
         }
     } catch (error) {

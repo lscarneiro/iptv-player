@@ -1,6 +1,6 @@
 // Stream List Component
 
-import { escapeHtml, scrollToTop } from '../utils/domHelpers.js';
+import { escapeHtml } from '../utils/domHelpers.js';
 
 export class StreamList {
     constructor(containerId) {
@@ -100,7 +100,7 @@ export class StreamList {
         if (this.container) {
             // Use requestAnimationFrame to ensure DOM has been updated before scrolling
             requestAnimationFrame(() => {
-                scrollToTop(this.container);
+                this.container.scrollTop = 0;
             });
         }
         

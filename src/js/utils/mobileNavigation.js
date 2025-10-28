@@ -1,7 +1,5 @@
 // Mobile Navigation Manager
 
-import { scrollToTop } from './domHelpers.js';
-
 export class MobileNavigation {
     constructor() {
         this.currentView = 'categories'; // 'categories', 'streams', 'video'
@@ -112,10 +110,13 @@ export class MobileNavigation {
         
         // Scroll to top when switching to streams view to ensure consistent behavior
         if (view === 'streams') {
-            const streamsContainer = document.getElementById('streamsContainer');
-            if (streamsContainer) {
-                scrollToTop(streamsContainer);
-            }
+            // Use setTimeout to ensure DOM is ready
+            setTimeout(() => {
+                const streamsContainer = document.getElementById('streamsContainer');
+                if (streamsContainer) {
+                    streamsContainer.scrollTop = 0;
+                }
+            }, 100);
         }
         
         // Update navigation buttons
@@ -245,10 +246,12 @@ export class MobileNavigation {
                 this.setActiveView('streams');
                 
                 // Ensure streams container is scrolled to top when switching to streams view
-                const streamsContainer = document.getElementById('streamsContainer');
-                if (streamsContainer) {
-                    scrollToTop(streamsContainer);
-                }
+                setTimeout(() => {
+                    const streamsContainer = document.getElementById('streamsContainer');
+                    if (streamsContainer) {
+                        streamsContainer.scrollTop = 0;
+                    }
+                }, 50);
             }, 300); // Small delay for better UX
         }
     }
@@ -286,10 +289,12 @@ export class MobileNavigation {
                 this.setActiveView('streams');
                 
                 // Ensure streams container is scrolled to top when returning from video
-                const streamsContainer = document.getElementById('streamsContainer');
-                if (streamsContainer) {
-                    scrollToTop(streamsContainer);
-                }
+                setTimeout(() => {
+                    const streamsContainer = document.getElementById('streamsContainer');
+                    if (streamsContainer) {
+                        streamsContainer.scrollTop = 0;
+                    }
+                }, 50);
             }
         }
     }
