@@ -70,10 +70,6 @@ export class IPTVApp {
         document.getElementById('accountClose').addEventListener('click', () => {
             this.userInfo.closeAccountPanel();
         });
-
-        document.getElementById('accountPanelBackdrop').addEventListener('click', () => {
-            this.userInfo.closeAccountPanel();
-        });
         
         // Refresh buttons
         document.getElementById('refreshCategories').addEventListener('click', () => {

@@ -108,12 +108,6 @@ export class UserInfo {
             settingsPanel.classList.remove('open');
         }
         
-        // Show backdrop
-        const backdrop = document.getElementById('accountPanelBackdrop');
-        if (backdrop) {
-            backdrop.classList.add('visible');
-        }
-        
         if (this.cachedUserInfo) {
             this.renderAccountInfo(this.cachedUserInfo);
         } else {
@@ -143,12 +137,6 @@ export class UserInfo {
     closeAccountPanel() {
         if (this.accountPanel) {
             this.accountPanel.classList.remove('open');
-        }
-        
-        // Hide backdrop
-        const backdrop = document.getElementById('accountPanelBackdrop');
-        if (backdrop) {
-            backdrop.classList.remove('visible');
         }
     }
 
