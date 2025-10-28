@@ -21,6 +21,7 @@ export class VideoPlayer {
         this.maxLoadingTime = 30000; // 30 seconds max to start playing
         this.networkCheckInterval = null;
         this.lastNetworkCheck = Date.now();
+        this.autoplayErrorShown = false;
         
         // Setup fullscreen handlers only once
         if (!VideoPlayer.handlersInitialized) {
@@ -79,6 +80,7 @@ export class VideoPlayer {
         this.errorRetryCount = 0;
         this.streamEndDetected = false;
         this.fragmentErrors = [];
+        this.autoplayErrorShown = false;
         this.clearAllMonitoring();
         
         // Update UI
@@ -152,6 +154,7 @@ export class VideoPlayer {
         this.errorRetryCount = 0;
         this.streamEndDetected = false;
         this.fragmentErrors = [];
+        this.autoplayErrorShown = false;
     }
 
     clearAllMonitoring() {
@@ -248,8 +251,23 @@ export class VideoPlayer {
     }
 
     showAutoplayBlockedDialog(videoElement, reason, solution, context) {
+        // Don't show autoplay error if playback has already started
+        if (this.playbackStarted) {
+            console.log('Playback already started, skipping autoplay error dialog');
+            return;
+        }
+        
+        this.autoplayErrorShown = true;
         const errorDiv = document.getElementById('videoPanelError');
         const videoContainer = document.querySelector('.video-container-large');
+        
+        // Auto-dismiss after 10 seconds if playback starts
+        setTimeout(() => {
+            if (this.playbackStarted && this.autoplayErrorShown) {
+                console.log('Auto-dismissing autoplay error after playback started');
+                this.dismissAutoplayErrorIfShown();
+            }
+        }, 10000);
         
         if (errorDiv) {
             const dialogHtml = `
@@ -299,6 +317,7 @@ export class VideoPlayer {
                     this.playbackStarted = true;
                     this.clearLoadingTimeout();
                     this.clearNetworkMonitoring();
+                    this.dismissAutoplayErrorIfShown();
                     this.startBufferingMonitor(videoElement);
                 }
             }).catch(e => {
@@ -307,6 +326,14 @@ export class VideoPlayer {
                     `Unable to start playback even with manual play. Error: ${e.message}. This may be a stream or browser compatibility issue.`,
                     true);
             });
+        }
+    }
+
+    dismissAutoplayErrorIfShown() {
+        if (this.autoplayErrorShown) {
+            console.log('Playback started successfully - dismissing autoplay error dialog');
+            this.autoplayErrorShown = false;
+            this.hideError();
         }
     }
 
@@ -323,6 +350,7 @@ export class VideoPlayer {
                 this.errorRetryCount = 0; // Reset retry count on successful start
                 this.clearLoadingTimeout();
                 this.clearNetworkMonitoring();
+                this.dismissAutoplayErrorIfShown();
                 this.startBufferingMonitor(videoElement);
             }
         });
@@ -345,6 +373,7 @@ export class VideoPlayer {
                 this.errorRetryCount = 0;
                 this.clearLoadingTimeout();
                 this.clearNetworkMonitoring();
+                this.dismissAutoplayErrorIfShown();
                 this.startBufferingMonitor(videoElement);
             }
         });
@@ -362,6 +391,22 @@ export class VideoPlayer {
         videoElement.addEventListener('waiting', () => {
             console.warn('Video waiting for data');
             this.recordBufferingEvent('waiting');
+        });
+        
+        videoElement.addEventListener('playing', () => {
+            console.log('Video is now playing');
+            if (!this.playbackStarted) {
+                this.playbackStarted = true;
+                this.clearLoadingTimeout();
+                this.clearNetworkMonitoring();
+                this.startBufferingMonitor(videoElement);
+            }
+            this.dismissAutoplayErrorIfShown();
+        });
+        
+        videoElement.addEventListener('play', () => {
+            console.log('Video play event fired');
+            this.dismissAutoplayErrorIfShown();
         });
     }
 
@@ -827,6 +872,7 @@ export class VideoPlayer {
         this.errorRetryCount = 0;
         this.streamEndDetected = false;
         this.fragmentErrors = [];
+        this.autoplayErrorShown = false;
         
         // Hide error and 3-column layout
         this.hideError();
@@ -1158,6 +1204,7 @@ export class VideoPlayer {
         this.errorRetryCount = 0;
         this.streamEndDetected = false;
         this.fragmentErrors = [];
+        this.autoplayErrorShown = false;
         this.isWatching = false;
     }
 }
