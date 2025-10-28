@@ -56,7 +56,7 @@ body {
     background-color: #2d2d2d;
     border-left: 1px solid #404040;
     transition: right 0.3s ease;
-    z-index: 1000;
+    z-index: 1010;
     overflow-y: auto;
 }
 
@@ -75,7 +75,7 @@ body {
     border-left: 1px solid #404040;
     transform: translateX(100%);
     transition: transform 0.3s ease;
-    z-index: 1000;
+    z-index: 1010;
     overflow-y: auto;
 }
 
@@ -100,7 +100,7 @@ body {
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.3s ease, visibility 0.3s ease;
-    z-index: 999;
+    z-index: 1005;
 }
 
 .account-panel-backdrop.visible {
@@ -587,7 +587,7 @@ body {
     padding: 1rem;
     transform: translateY(100%);
     transition: transform 0.3s ease;
-    z-index: 999;
+    z-index: 1000;
 }
 
 .player-section.open {
@@ -850,7 +850,7 @@ body {
     right: 0;
     background-color: #2d2d2d;
     border-bottom: 1px solid #404040;
-    z-index: 1001;
+    z-index: 1000;
     padding: 0.5rem;
 }
 
@@ -1132,7 +1132,7 @@ body {
         position: fixed;
         top: 60px;
         height: calc(100vh - 60px);
-        z-index: 1002;
+        z-index: 1000;
     }
 
     .video-player {
