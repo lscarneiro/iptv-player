@@ -1213,6 +1213,12 @@ body {
         padding: 1.5rem;
     }
 
+    /* Add space for Android virtual buttons */
+    .content-area {
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    }
+
     /* Hide load more hint on very small screens */
     @media (max-width: 480px) {
         .load-more-hint {

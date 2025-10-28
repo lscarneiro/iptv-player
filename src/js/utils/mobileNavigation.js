@@ -207,11 +207,20 @@ export class MobileNavigation {
                 break;
             case 'streams':
                 rightPanel.classList.add('active');
+                // Reinitialize infinite scroll when switching to streams view
+                this.reinitializeStreamListScroll();
                 break;
             case 'video':
                 // Always show video panel when view is set to video
                 videoPanel.classList.add('active');
                 break;
+        }
+    }
+
+    reinitializeStreamListScroll() {
+        // Find the stream list component and reinitialize its infinite scroll
+        if (window.app && window.app.streamList) {
+            window.app.streamList.reinitializeInfiniteScroll();
         }
     }
 

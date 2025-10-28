@@ -391,6 +391,9 @@ export class IPTVApp {
             // Refresh mobile navigation
             this.mobileNav.refresh();
             
+            // Ensure infinite scroll is properly set up after loading streams
+            this.streamList.reinitializeInfiniteScroll();
+            
         } catch (error) {
             this.streamList.showError(`Failed to load streams: ${error.message}`);
         }

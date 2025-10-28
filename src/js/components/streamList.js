@@ -18,10 +18,16 @@ export class StreamList {
 
     setupInfiniteScroll() {
         // Get the content area that contains the streams
+        // On mobile, this is the right-panel, on desktop it's the content-area
         const contentArea = this.container.parentElement;
         if (!contentArea) return;
 
-        contentArea.addEventListener('scroll', () => {
+        // Remove any existing scroll listeners to avoid duplicates
+        if (this.scrollHandler) {
+            contentArea.removeEventListener('scroll', this.scrollHandler);
+        }
+
+        this.scrollHandler = () => {
             if (this.isLoading || !this.infiniteScrollEnabled) return;
             
             const { scrollTop, scrollHeight, clientHeight } = contentArea;
@@ -30,7 +36,12 @@ export class StreamList {
             if (scrollTop + clientHeight >= scrollHeight - threshold) {
                 this.loadMoreAutomatically();
             }
-        });
+        };
+
+        contentArea.addEventListener('scroll', this.scrollHandler);
+        
+        // Store reference to content area for scroll position management
+        this.scrollContainer = contentArea;
     }
 
     loadMoreAutomatically() {
@@ -79,6 +90,10 @@ export class StreamList {
             : streams;
 
         this.allStreams = filteredStreams;
+        
+        // Reset visible streams count and scroll position when rendering new category
+        this.visibleStreams = 50;
+        this.scrollToTop();
         
         // Update panel header with category name and count
         const panelTitle = document.querySelector('.right-panel .panel-title');
@@ -181,6 +196,19 @@ export class StreamList {
         }, 100);
     }
 
+    scrollToTop() {
+        // Use stored scroll container reference
+        if (this.scrollContainer) {
+            this.scrollContainer.scrollTop = 0;
+        } else {
+            // Fallback to parent element
+            const contentArea = this.container.parentElement;
+            if (contentArea) {
+                contentArea.scrollTop = 0;
+            }
+        }
+    }
+
     showLoading(message) {
         this.container.innerHTML = `<div class="loading">${message}</div>`;
     }
@@ -245,6 +273,24 @@ export class StreamList {
                 watchBtn.textContent = 'Watch';
             }
         });
+    }
+
+    // Reinitialize infinite scroll when mobile navigation changes
+    reinitializeInfiniteScroll() {
+        // Small delay to ensure DOM is updated
+        setTimeout(() => {
+            this.setupInfiniteScroll();
+        }, 100);
+    }
+
+    // Method to disable infinite scroll temporarily
+    disableInfiniteScroll() {
+        this.infiniteScrollEnabled = false;
+    }
+
+    // Method to enable infinite scroll
+    enableInfiniteScroll() {
+        this.infiniteScrollEnabled = true;
     }
 }
 
