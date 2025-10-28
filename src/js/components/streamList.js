@@ -17,19 +17,30 @@ export class StreamList {
     }
 
     setupInfiniteScroll() {
-        // Get the content area that contains the streams
-        const contentArea = this.container.parentElement;
+        // The container itself is the scrollable area
+        const contentArea = this.container;
         if (!contentArea) return;
 
+        // Use throttled scroll event for better performance
+        let scrollTimeout;
         contentArea.addEventListener('scroll', () => {
-            if (this.isLoading || !this.infiniteScrollEnabled) return;
+            if (scrollTimeout) return;
             
-            const { scrollTop, scrollHeight, clientHeight } = contentArea;
-            const threshold = 200; // Load more when 200px from bottom
-            
-            if (scrollTop + clientHeight >= scrollHeight - threshold) {
-                this.loadMoreAutomatically();
-            }
+            scrollTimeout = setTimeout(() => {
+                scrollTimeout = null;
+                
+                if (this.isLoading || !this.infiniteScrollEnabled) return;
+                
+                const { scrollTop, scrollHeight, clientHeight } = contentArea;
+                const threshold = 200; // Load more when 200px from bottom
+                
+                // Debug logging (can be removed in production)
+                // console.log('Scroll check:', { scrollTop, scrollHeight, clientHeight, threshold });
+                
+                if (scrollTop + clientHeight >= scrollHeight - threshold) {
+                    this.loadMoreAutomatically();
+                }
+            }, 50); // Throttle to 50ms
         });
     }
 
@@ -49,6 +60,11 @@ export class StreamList {
                 this.isLoading = false;
             }, 100);
         }
+    }
+
+    // Method to enable/disable infinite scroll
+    setInfiniteScrollEnabled(enabled) {
+        this.infiniteScrollEnabled = enabled;
     }
 
     setOnWatchStream(callback) {
@@ -113,26 +129,13 @@ export class StreamList {
             `;
         });
         
-        // Add loading indicator or "Load More" button if there are more items
-        if (hasMore) {
-            const remaining = filteredStreams.length - this.visibleStreams;
-            
-            if (this.isLoading) {
-                html += `
-                    <div class="load-more-container">
-                        <div class="loading">Loading more streams...</div>
-                    </div>
-                `;
-            } else {
-                html += `
-                    <div class="load-more-container">
-                        <button class="load-more-btn" id="loadMoreStreams">
-                            Load More (${remaining} remaining)
-                        </button>
-                        <div class="load-more-hint">Or scroll down for auto-load</div>
-                    </div>
-                `;
-            }
+        // Add loading indicator if there are more items and we're loading
+        if (hasMore && this.isLoading) {
+            html += `
+                <div class="load-more-container">
+                    <div class="loading">Loading more streams...</div>
+                </div>
+            `;
         }
         
         this.container.innerHTML = html;
@@ -156,29 +159,12 @@ export class StreamList {
             });
         });
         
-        // Add load more button listener
-        const loadMoreBtn = document.getElementById('loadMoreStreams');
-        if (loadMoreBtn) {
-            loadMoreBtn.addEventListener('click', () => {
-                this.loadMore();
-            });
-        }
+        // Infinite scroll handles loading automatically - no manual button needed
     }
 
     loadMore() {
-        if (this.isLoading) return;
-        
-        this.isLoading = true;
-        this.visibleStreams += 50;
-        
-        // Re-render with updated visibleStreams
-        const filteredStreams = this.getFilteredStreams();
-        this.render(filteredStreams, this.currentCategoryName);
-        
-        // Reset loading state
-        setTimeout(() => {
-            this.isLoading = false;
-        }, 100);
+        // This method is kept for backward compatibility but now just calls loadMoreAutomatically
+        this.loadMoreAutomatically();
     }
 
     showLoading(message) {
