@@ -1,5 +1,7 @@
 // Mobile Navigation Manager
 
+import { scrollToTop } from './domHelpers.js';
+
 export class MobileNavigation {
     constructor() {
         this.currentView = 'categories'; // 'categories', 'streams', 'video'
@@ -107,6 +109,14 @@ export class MobileNavigation {
         if (!this.isMobile) return;
         
         this.currentView = view;
+        
+        // Scroll to top when switching to streams view to ensure consistent behavior
+        if (view === 'streams') {
+            const streamsContainer = document.getElementById('streamsContainer');
+            if (streamsContainer) {
+                scrollToTop(streamsContainer);
+            }
+        }
         
         // Update navigation buttons
         this.updateNavigationButtons();
@@ -233,6 +243,12 @@ export class MobileNavigation {
             // Auto-navigate to streams view
             setTimeout(() => {
                 this.setActiveView('streams');
+                
+                // Ensure streams container is scrolled to top when switching to streams view
+                const streamsContainer = document.getElementById('streamsContainer');
+                if (streamsContainer) {
+                    scrollToTop(streamsContainer);
+                }
             }, 300); // Small delay for better UX
         }
     }
@@ -268,6 +284,12 @@ export class MobileNavigation {
             // Navigate back to streams if currently on video
             if (this.currentView === 'video') {
                 this.setActiveView('streams');
+                
+                // Ensure streams container is scrolled to top when returning from video
+                const streamsContainer = document.getElementById('streamsContainer');
+                if (streamsContainer) {
+                    scrollToTop(streamsContainer);
+                }
             }
         }
     }

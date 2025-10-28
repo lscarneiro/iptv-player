@@ -1,6 +1,6 @@
 // Stream List Component
 
-import { escapeHtml } from '../utils/domHelpers.js';
+import { escapeHtml, scrollToTop } from '../utils/domHelpers.js';
 
 export class StreamList {
     constructor(containerId) {
@@ -95,6 +95,14 @@ export class StreamList {
             : streams;
 
         this.allStreams = filteredStreams;
+        
+        // Reset scroll position to top when rendering new streams (important for mobile)
+        if (this.container) {
+            // Use requestAnimationFrame to ensure DOM has been updated before scrolling
+            requestAnimationFrame(() => {
+                scrollToTop(this.container);
+            });
+        }
         
         // Update panel header with category name and count
         const panelTitle = document.querySelector('.right-panel .panel-title');
