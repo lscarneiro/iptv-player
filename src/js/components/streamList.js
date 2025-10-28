@@ -96,6 +96,14 @@ export class StreamList {
 
         this.allStreams = filteredStreams;
         
+        // Reset scroll position to top when rendering new streams (important for mobile)
+        if (this.container) {
+            // Use requestAnimationFrame to ensure DOM has been updated before scrolling
+            requestAnimationFrame(() => {
+                this.container.scrollTop = 0;
+            });
+        }
+        
         // Update panel header with category name and count
         const panelTitle = document.querySelector('.right-panel .panel-title');
         if (panelTitle) {

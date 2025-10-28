@@ -298,6 +298,14 @@ export class IPTVApp {
     async handleCategorySelect(categoryId) {
         this.currentCategory = categoryId;
         
+        // Scroll to top of streams container on category change (especially important for mobile)
+        setTimeout(() => {
+            const streamsContainer = document.getElementById('streamsContainer');
+            if (streamsContainer) {
+                streamsContainer.scrollTop = 0;
+            }
+        }, 50);
+        
         // Update category count if not already loaded (exclude "All Channels")
         if (categoryId !== 'all') {
             const categoryItem = document.querySelector(`[data-category-id="${categoryId}"]`);

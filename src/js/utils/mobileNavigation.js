@@ -108,6 +108,17 @@ export class MobileNavigation {
         
         this.currentView = view;
         
+        // Scroll to top when switching to streams view to ensure consistent behavior
+        if (view === 'streams') {
+            // Use setTimeout to ensure DOM is ready
+            setTimeout(() => {
+                const streamsContainer = document.getElementById('streamsContainer');
+                if (streamsContainer) {
+                    streamsContainer.scrollTop = 0;
+                }
+            }, 100);
+        }
+        
         // Update navigation buttons
         this.updateNavigationButtons();
         
@@ -233,6 +244,14 @@ export class MobileNavigation {
             // Auto-navigate to streams view
             setTimeout(() => {
                 this.setActiveView('streams');
+                
+                // Ensure streams container is scrolled to top when switching to streams view
+                setTimeout(() => {
+                    const streamsContainer = document.getElementById('streamsContainer');
+                    if (streamsContainer) {
+                        streamsContainer.scrollTop = 0;
+                    }
+                }, 50);
             }, 300); // Small delay for better UX
         }
     }
@@ -268,6 +287,14 @@ export class MobileNavigation {
             // Navigate back to streams if currently on video
             if (this.currentView === 'video') {
                 this.setActiveView('streams');
+                
+                // Ensure streams container is scrolled to top when returning from video
+                setTimeout(() => {
+                    const streamsContainer = document.getElementById('streamsContainer');
+                    if (streamsContainer) {
+                        streamsContainer.scrollTop = 0;
+                    }
+                }, 50);
             }
         }
     }
