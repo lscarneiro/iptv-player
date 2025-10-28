@@ -497,6 +497,43 @@ body {
     100% { transform: rotate(360deg); }
 }
 
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+/* Buffering notification styles */
+.buffering-notification {
+    pointer-events: none;
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.notification-icon {
+    animation: spin 1s linear infinite;
+}
+
 /* Buffering overlay */
 .buffering-overlay {
     backdrop-filter: blur(2px);

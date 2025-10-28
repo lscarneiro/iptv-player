@@ -648,14 +648,66 @@ export class VideoPlayer {
             event => Date.now() - event.timestamp < 60000 // Last minute
         );
         
-        // More lenient thresholds - try recovery before showing dialog
-        if (recentEvents.length >= 3 && this.bufferingRecoveryAttempts < this.maxBufferingRecoveryAttempts) {
-            console.warn(`Buffering issues detected (${recentEvents.length} events), attempting automatic recovery`);
+        // Progressive response to buffering issues
+        if (recentEvents.length >= 3 && this.bufferingRecoveryAttempts === 0) {
+            console.warn(`Initial buffering issues detected (${recentEvents.length} events), attempting automatic recovery`);
             this.attemptBufferingRecovery();
+        } else if (recentEvents.length >= 5 && this.bufferingRecoveryAttempts === 1) {
+            console.warn(`Persistent buffering issues (${recentEvents.length} events), trying background stream reload`);
+            this.showBufferingNotification();
+            this.reloadStreamInBackground();
         } else if (recentEvents.length >= 8) {
-            console.warn('Severe buffering detected after recovery attempts, suggesting manual stream reload');
+            console.warn('Severe buffering detected after recovery attempts, showing user options');
             this.showBufferingIssueDialog();
         }
+    }
+
+    showBufferingNotification() {
+        // Show a subtle notification that we're trying to fix buffering
+        const videoContainer = document.querySelector('.video-container-large');
+        if (!videoContainer) return;
+        
+        // Don't show if there's already a buffering overlay
+        if (document.querySelector('.buffering-overlay') || document.querySelector('.buffering-notification')) {
+            return;
+        }
+        
+        const notification = document.createElement('div');
+        notification.className = 'buffering-notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <span class="notification-icon">🔄</span>
+                <span class="notification-text">Improving stream quality...</span>
+            </div>
+        `;
+        notification.style.cssText = `
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(33, 150, 243, 0.9);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            z-index: 999;
+            backdrop-filter: blur(4px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            animation: slideInRight 0.3s ease-out;
+        `;
+        
+        videoContainer.appendChild(notification);
+        
+        // Auto-remove after 4 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.style.animation = 'slideOutRight 0.3s ease-in';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.remove();
+                    }
+                }, 300);
+            }
+        }, 4000);
     }
 
     attemptBufferingRecovery(videoElement = null) {
@@ -733,12 +785,13 @@ export class VideoPlayer {
                     // Clear some fragment errors to give recovery a chance
                     this.fragmentErrors = this.fragmentErrors.slice(-3);
                 } else {
-                    this.handleError('STREAM_INTERRUPTED', 
+                    // Show as overlay instead of hiding video
+                    this.showStreamInterruptedOverlay(
                         `Stream is experiencing persistent connection issues after ${this.bufferingRecoveryAttempts} recovery attempts.\n\n` +
                         `**Fragment Errors:** ${this.fragmentErrors.length} errors in 30 seconds\n` +
                         `**Recovery Attempts:** ${this.bufferingRecoveryAttempts}/${this.maxBufferingRecoveryAttempts} completed\n` +
-                        `**Recommendation:** Try reloading the stream or check your network connection.`,
-                        true);
+                        `**Recommendation:** Try reloading the stream or check your network connection.`
+                    );
                 }
             } else {
                 // Stream never started and having fragment issues
@@ -1130,59 +1183,186 @@ export class VideoPlayer {
     }
 
     showBufferingIssueDialog() {
-        // Only show if not already showing an error
-        const errorDiv = document.getElementById('videoPanelError');
-        if (errorDiv && errorDiv.style.display === 'none') {
-            const dialogHtml = `
-                <div class="error-container buffering-issues">
-                    <div class="error-icon">⏳</div>
+        // Don't show if there's already a buffering overlay
+        const existingOverlay = document.querySelector('.buffering-overlay');
+        if (existingOverlay) {
+            return;
+        }
+        
+        const dialogHtml = `
+            <div class="error-container buffering-issues">
+                <div class="error-icon">⏳</div>
+                <div class="error-content">
+                    <h3 class="error-title">Frequent Buffering Detected</h3>
+                    <p class="error-message">
+                        The stream is experiencing frequent buffering. This might be due to network issues 
+                        or server problems. The video will continue playing while we try to improve the connection.
+                    </p>
+                    <div class="error-actions">
+                        <button class="error-btn retry-btn" onclick="window.app.videoPlayer.reloadStreamWithOverlay(this);">
+                            🔄 Reload Stream
+                        </button>
+                        <button class="error-btn continue-btn" onclick="window.app.videoPlayer.dismissBufferingOverlay()">
+                            ▶️ Continue Watching
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Show as overlay, keeping video visible and playing
+        const overlay = document.createElement('div');
+        overlay.className = 'buffering-overlay';
+        overlay.innerHTML = dialogHtml;
+        overlay.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(2px);
+        `;
+        
+        const videoContainer = document.querySelector('.video-container-large');
+        if (videoContainer) {
+            videoContainer.style.position = 'relative';
+            videoContainer.appendChild(overlay);
+            
+            // Auto-hide after 15 seconds if user doesn't interact
+            setTimeout(() => {
+                if (overlay.parentNode) {
+                    console.log('Auto-dismissing buffering overlay after 15 seconds');
+                    overlay.remove();
+                }
+            }, 15000);
+        }
+    }
+
+    showStreamInterruptedOverlay(message) {
+        // Don't show if there's already an overlay
+        const existingOverlay = document.querySelector('.buffering-overlay');
+        if (existingOverlay) {
+            return;
+        }
+        
+        const dialogHtml = `
+            <div class="error-container network-error">
+                <div class="error-icon">📡</div>
+                <div class="error-content">
+                    <h3 class="error-title">Stream Connection Issues</h3>
+                    <p class="error-message">
+                        ${message.replace(/\n/g, '<br>')}
+                    </p>
+                    <div class="error-actions">
+                        <button class="error-btn retry-btn" onclick="window.app.videoPlayer.reloadStreamWithOverlay(this);">
+                            🔄 Reload Stream
+                        </button>
+                        <button class="error-btn continue-btn" onclick="window.app.videoPlayer.dismissBufferingOverlay()">
+                            ▶️ Keep Trying
+                        </button>
+                        <button class="error-btn close-btn" onclick="window.app.videoPlayer.closeVideoPanel()">
+                            ❌ Close Player
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Show as overlay, keeping video visible and playing
+        const overlay = document.createElement('div');
+        overlay.className = 'buffering-overlay';
+        overlay.innerHTML = dialogHtml;
+        overlay.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(3px);
+        `;
+        
+        const videoContainer = document.querySelector('.video-container-large');
+        if (videoContainer) {
+            videoContainer.style.position = 'relative';
+            videoContainer.appendChild(overlay);
+        }
+    }
+
+    reloadStreamWithOverlay(buttonElement) {
+        // Show loading state in the overlay while keeping video playing
+        const overlay = buttonElement.closest('.buffering-overlay');
+        if (overlay) {
+            const loadingHtml = `
+                <div class="error-container loading-state">
+                    <div class="error-icon">🔄</div>
                     <div class="error-content">
-                        <h3 class="error-title">Frequent Buffering Detected</h3>
+                        <h3 class="error-title">Reloading Stream</h3>
                         <p class="error-message">
-                            The stream is experiencing frequent buffering. This might be due to network issues 
-                            or server problems. Would you like to reload the stream?
+                            Restarting the stream connection while keeping the current video playing...
                         </p>
-                        <div class="error-actions">
-                            <button class="error-btn retry-btn" onclick="window.app.videoPlayer.reloadStream(); window.app.videoPlayer.hideError();">
-                                🔄 Reload Stream
-                            </button>
-                            <button class="error-btn continue-btn" onclick="window.app.videoPlayer.hideError()">
-                                ▶️ Continue Watching
-                            </button>
-                        </div>
+                        <div class="loading-spinner"></div>
                     </div>
                 </div>
             `;
+            overlay.innerHTML = loadingHtml;
             
-            // Show as overlay, not replacing video
-            const overlay = document.createElement('div');
-            overlay.className = 'buffering-overlay';
-            overlay.innerHTML = dialogHtml;
-            overlay.style.cssText = `
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(0, 0, 0, 0.8);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 1000;
-            `;
+            // Auto-dismiss overlay after reload attempt
+            setTimeout(() => {
+                if (overlay.parentNode) {
+                    overlay.remove();
+                }
+            }, 5000);
+        }
+        
+        // Perform the reload without hiding the video
+        this.reloadStreamInBackground();
+    }
+
+    reloadStreamInBackground() {
+        if (this.currentStreamUrl && this.isWatching) {
+            console.log('Reloading stream in background:', this.currentStreamUrl);
             
-            const videoContainer = document.querySelector('.video-container-large');
-            if (videoContainer) {
-                videoContainer.style.position = 'relative';
-                videoContainer.appendChild(overlay);
-                
-                // Auto-hide after 10 seconds if user doesn't interact
+            // Reset error tracking when manually reloading
+            this.bufferingEvents = [];
+            this.fragmentErrors = [];
+            this.errorRetryCount = 0;
+            this.streamEndDetected = false;
+            this.bufferingRecoveryAttempts = 0;
+            
+            // Don't hide video or show loading state - reload in background
+            const videoElement = document.getElementById('videoPlayerLarge');
+            
+            // Store current playback position to try to resume
+            const currentTime = videoElement ? videoElement.currentTime : 0;
+            
+            this.initializePlayer(this.currentStreamUrl, videoElement);
+            
+            // Try to seek to previous position after a short delay
+            if (currentTime > 0) {
                 setTimeout(() => {
-                    if (overlay.parentNode) {
-                        overlay.remove();
+                    if (videoElement && videoElement.readyState >= 2) {
+                        videoElement.currentTime = Math.max(0, currentTime - 5); // Go back 5 seconds
                     }
-                }, 10000);
+                }, 2000);
             }
+        }
+    }
+
+    dismissBufferingOverlay() {
+        const overlay = document.querySelector('.buffering-overlay');
+        if (overlay) {
+            console.log('User dismissed buffering overlay');
+            overlay.remove();
         }
     }
 
