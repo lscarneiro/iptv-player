@@ -87,7 +87,7 @@ export class VideoPlayer {
         playerTitle.textContent = streamName;
         videoPanelTitle.textContent = streamName;
         videoInfoTitle.textContent = streamName;
-        videoInfoDetails.textContent = `Stream URL: ${streamUrl}`;
+        videoInfoDetails.textContent = '';
         
         fallbackUrl.href = streamUrl;
         fallbackUrl.textContent = streamUrl;
