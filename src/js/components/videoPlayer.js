@@ -1,92 +1,771 @@
-// Refactored Video Player - Core orchestration with single responsibility
-import { ErrorHandler } from './errorHandler.js';
+// Video Player Component
+
+import { escapeHtml } from '../utils/domHelpers.js';
 import { RetryManager } from './retryManager.js';
 import { BufferingManager } from './bufferingManager.js';
-import { HlsPlayerManager } from './hlsPlayerManager.js';
-import { StreamAnalyzer } from './streamAnalyzer.js';
-import { VideoEventManager } from './videoEventManager.js';
-import { NetworkMonitor } from '../utils/networkMonitor.js';
 
 export class VideoPlayer {
     constructor() {
-        this.initializeState();
-        this.initializeManagers();
-        this.initializeFullscreenHandlers();
-    }
-
-    initializeState() {
+        this.hlsPlayer = null;
         this.isWatching = false;
         this.currentStreamUrl = null;
         this.currentStreamName = null;
         this.playbackStarted = false;
+        this.retryManager = new RetryManager(5);
+        this.bufferingCheckInterval = null;
+        this.lastBufferTime = 0;
+        this.bufferingEvents = [];
         this.streamEndDetected = false;
-        this.autoplayErrorShown = false;
         this.fragmentErrors = [];
         this.maxFragmentErrors = 8;
-    }
-
-    initializeManagers() {
-        this.errorHandler = new ErrorHandler(this);
-        this.retryManager = new RetryManager(5);
-        this.bufferingManager = new BufferingManager(this, this.errorHandler);
-        this.hlsManager = new HlsPlayerManager(this);
-        this.eventManager = new VideoEventManager(this);
-        this.networkMonitor = new NetworkMonitor();
+        this.autoplayErrorShown = false;
+        this.loadingTimeout = null;
+        this.maxLoadingTime = 30000;
+        this.networkCheckInterval = null;
+        
+        // Setup fullscreen handlers only once
+        if (!VideoPlayer.handlersInitialized) {
+            VideoPlayer.handlersInitialized = true;
+            // Setup fullscreen handlers after DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    this.initializeFullscreenHandlers();
+                });
+            } else {
+                this.initializeFullscreenHandlers();
+            }
+        }
     }
 
     initializeFullscreenHandlers() {
-        if (VideoPlayer.handlersInitialized) return;
-        VideoPlayer.handlersInitialized = true;
+        // Setup fullscreen handlers for both video players
+        const videoRegular = document.getElementById('videoPlayer');
+        const videoLarge = document.getElementById('videoPlayerLarge');
         
-        const setupHandler = () => {
-            ['videoPlayer', 'videoPlayerLarge'].forEach(id => {
-                const video = document.getElementById(id);
-                if (video) this.setupFullscreenHandler(video);
-            });
-        };
-        
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', setupHandler);
+        if (videoRegular) {
+            this.setupFullscreenHandler(videoRegular);
         } else {
-            setupHandler();
+            console.warn('videoRegular not found');
+        }
+        if (videoLarge) {
+            this.setupFullscreenHandler(videoLarge);
+        } else {
+            console.warn('videoLarge not found');
         }
     }
 
     playStream(streamUrl, streamName) {
-        console.log('Starting new stream:', streamName, streamUrl);
+        const videoLarge = document.getElementById('videoPlayerLarge');
+        const playerSection = document.getElementById('playerSection');
+        const videoPanel = document.getElementById('videoPanel');
+        const mainContainer = document.getElementById('mainContainer');
+        const playerTitle = document.getElementById('playerTitle');
+        const videoPanelTitle = document.getElementById('videoPanelTitle');
+        const fallbackLink = document.getElementById('fallbackLink');
+        const fallbackLinkLarge = document.getElementById('fallbackLinkLarge');
+        const fallbackUrl = document.getElementById('fallbackUrl');
+        const fallbackUrlLarge = document.getElementById('fallbackUrlLarge');
+        const videoInfoTitle = document.getElementById('videoInfoTitle');
+        const videoInfoDetails = document.getElementById('videoInfoDetails');
         
-        this.forceCleanup();
-        this.updateUI(streamUrl, streamName);
-        this.resetStateForNewStream(streamUrl, streamName);
-        this.initializePlayer(streamUrl);
-        this.startMonitoring();
+        // Force cleanup to prevent race conditions
+        this.forceCleanupCurrentStream();
         
-        this.isWatching = true;
-    }
-
-    resetStateForNewStream(streamUrl, streamName) {
+        // Reset state for new stream
         this.currentStreamUrl = streamUrl;
         this.currentStreamName = streamName;
         this.playbackStarted = false;
         this.streamEndDetected = false;
+        this.fragmentErrors = [];
         this.autoplayErrorShown = false;
+        this.retryManager.reset();
+        this.clearBufferingMonitor();
+        this.clearLoadingTimeout();
+        this.clearNetworkMonitoring();
+        
+        // Update UI
+        playerTitle.textContent = streamName;
+        videoPanelTitle.textContent = streamName;
+        videoInfoTitle.textContent = streamName;
+        videoInfoDetails.textContent = `Stream URL: ${streamUrl}`;
+        
+        fallbackUrl.href = streamUrl;
+        fallbackUrl.textContent = streamUrl;
+        fallbackUrlLarge.href = streamUrl;
+        fallbackUrlLarge.textContent = streamUrl;
+        
+        // Show 3-column layout
+        mainContainer.classList.add('watching');
+        videoPanel.style.display = 'flex';
+        fallbackLink.style.display = 'block';
+        fallbackLinkLarge.style.display = 'block';
+        
+        // Notify mobile navigation that video panel is ready
+        if (window.app && window.app.mobileNav) {
+            setTimeout(() => {
+                window.app.mobileNav.onVideoReady();
+            }, 100);
+        }
+        
+        // Clear any previous errors
+        this.hideError();
+        
+        // Check for black.ts streams (no signal)
+        if (streamUrl && streamUrl.includes('black.ts')) {
+            this.handleNoSignal();
+            return;
+        }
+        
+        this.initializePlayer(streamUrl, videoLarge);
+        this.startLoadingTimeout();
+        this.startNetworkMonitoring();
+        this.isWatching = true;
+    }
+
+    initializePlayer(streamUrl, videoElement) {
+        // Destroy existing HLS instance
+        if (this.hlsPlayer) {
+            this.hlsPlayer.destroy();
+            this.hlsPlayer = null;
+        }
+        
+        // Check for black.ts stream ending indicator
+        if (streamUrl.includes('black.ts')) {
+            this.handleStreamEnded();
+            return;
+        }
+        
+        // Check if HLS is supported
+        if (window.Hls && Hls.isSupported()) {
+            this.setupHlsPlayer(streamUrl, videoElement);
+        } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+            this.setupNativePlayer(streamUrl, videoElement);
+        } else {
+            this.handleError('UNSUPPORTED', 'HLS not supported on this device. Try the direct link below.');
+        }
+    }
+
+    setupHlsPlayer(streamUrl, videoElement) {
+        this.hlsPlayer = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 90,
+            maxLoadingDelay: 4,
+            maxBufferLength: 30,
+            maxMaxBufferLength: 600,
+            fragLoadingTimeOut: 20000,
+            manifestLoadingTimeOut: 10000,
+            fragLoadingMaxRetry: 2,
+            manifestLoadingMaxRetry: 1
+        });
+        
+        this.hlsPlayer.loadSource(streamUrl);
+        this.hlsPlayer.attachMedia(videoElement);
+        
+        // Set up event listeners
+        this.setupHlsEventListeners(videoElement);
+        this.setupVideoEventListeners(videoElement);
+    }
+
+    setupNativePlayer(streamUrl, videoElement) {
+        videoElement.src = streamUrl;
+        this.setupVideoEventListeners(videoElement);
+        
+        this.attemptAutoplay(videoElement, 'Native player loaded');
+    }
+
+    setupHlsEventListeners(videoElement) {
+        this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+            console.log('HLS manifest parsed successfully');
+            this.attemptAutoplay(videoElement, 'HLS manifest loaded');
+        });
+        
+        this.hlsPlayer.on(Hls.Events.FRAG_LOADED, () => {
+            if (!this.playbackStarted) {
+                this.playbackStarted = true;
+                this.retryManager.reset(); // Reset retry count on successful start
+                console.log('First fragment loaded - playback started');
+                this.clearLoadingTimeout();
+                this.clearNetworkMonitoring();
+                this.dismissAutoplayError();
+                this.startBufferingMonitor(videoElement);
+            }
+        });
+        
+        this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
+            console.error('HLS error:', data);
+            this.handleHlsError(data, videoElement);
+        });
+    }
+
+    setupVideoEventListeners(videoElement) {
+        videoElement.addEventListener('loadstart', () => {
+            console.log('Video load started');
+        });
+        
+        videoElement.addEventListener('canplay', () => {
+            if (!this.playbackStarted) {
+                this.playbackStarted = true;
+                this.retryManager.reset();
+                console.log('Video can play - playback starting');
+                this.clearLoadingTimeout();
+                this.clearNetworkMonitoring();
+                this.dismissAutoplayError();
+                this.startBufferingMonitor(videoElement);
+            }
+        });
+        
+        videoElement.addEventListener('playing', () => {
+            console.log('Video is now playing');
+            if (!this.playbackStarted) {
+                this.playbackStarted = true;
+                this.retryManager.reset();
+                this.clearLoadingTimeout();
+                this.clearNetworkMonitoring();
+                this.startBufferingMonitor(videoElement);
+            }
+            this.dismissAutoplayError();
+        });
+        
+        videoElement.addEventListener('play', () => {
+            console.log('Video play event fired');
+            this.dismissAutoplayError();
+        });
+        
+        videoElement.addEventListener('error', (e) => {
+            console.error('Video element error:', e);
+            this.handleVideoError(e);
+        });
+        
+        videoElement.addEventListener('stalled', () => {
+            console.warn('Video playback stalled');
+            this.recordBufferingEvent('stalled');
+        });
+        
+        videoElement.addEventListener('waiting', () => {
+            console.warn('Video waiting for data');
+            this.recordBufferingEvent('waiting');
+        });
+    }
+
+    handleHlsError(data, videoElement) {
+        const { type, details, fatal, frag } = data;
+        
+        // Check if this is a black.ts fragment error (no signal)
+        if (frag && frag.url && frag.url.includes('black.ts')) {
+            console.log('Detected black.ts fragment - no signal');
+            this.handleNoSignal();
+            return;
+        }
+        
+        // Check for repeated fragment load errors (potential stream ending)
+        if (details === 'fragLoadError' && !fatal) {
+            this.trackFragmentError(data);
+            return;
+        }
+        
+        if (fatal) {
+            switch (type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                    this.handleNetworkError(details, data);
+                    break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                    this.handleMediaError(details, data, videoElement);
+                    break;
+                default:
+                    this.handleError('HLS_FATAL', `Fatal HLS error: ${details}`);
+                    break;
+            }
+        } else {
+            // Non-fatal errors - log but continue
+            console.warn('Non-fatal HLS error:', data);
+        }
+    }
+
+    handleNetworkError(details, data) {
+        // Check if this is a CORS error with black.ts (no signal)
+        if (data.frag && data.frag.url && data.frag.url.includes('black.ts')) {
+            console.log('CORS error with black.ts fragment - no signal');
+            this.handleNoSignal();
+            return;
+        }
+        
+        if (!this.playbackStarted) {
+            // Stream failed to start
+            if (this.retryManager.canRetry()) {
+                const delay = this.retryManager.getNextRetryDelay();
+                console.log(`Retrying stream load (attempt ${this.retryManager.getCurrentAttempt()}/${this.retryManager.getMaxRetries()}) in ${delay}ms`);
+                setTimeout(() => {
+                    this.retryStream();
+                }, delay);
+            } else {
+                this.handleError('STREAM_FAILED_TO_START', 
+                    `Unable to start stream after ${this.retryManager.getMaxRetries()} attempts.\n\n**Error:** ${details}\n\n**Possible causes:**\n• Network connectivity issues\n• Server problems\n• Stream is offline\n• CORS or SSL issues`);
+            }
+        } else {
+            // Stream was playing but encountered network error
+            this.handleError('STREAM_INTERRUPTED', 
+                `Stream connection lost during playback.\n\n**Error:** ${details}\n\n**Possible causes:**\n• Network interruption\n• Server issues\n• Stream ended unexpectedly`,
+                true); // Show retry option
+        }
+    }
+
+    handleMediaError(details, data, videoElement) {
+        if (details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
+            this.recordBufferingEvent('buffer_stalled');
+            return;
+        }
+        
+        if (!this.playbackStarted) {
+            this.handleError('MEDIA_ERROR', 
+                'Media format error. This stream format may not be supported by your browser.');
+        } else {
+            // Try to recover from media error
+            try {
+                this.hlsPlayer.recoverMediaError();
+                console.log('Attempting to recover from media error');
+            } catch (e) {
+                this.handleError('MEDIA_RECOVERY_FAILED', 
+                    'Playback error occurred and recovery failed.',
+                    true);
+            }
+        }
+    }
+
+    handleVideoError(error) {
+        const videoElement = error.target;
+        const errorCode = videoElement.error ? videoElement.error.code : 'unknown';
+        
+        if (!this.playbackStarted) {
+            this.handleError('VIDEO_LOAD_ERROR', 
+                `Failed to load video (Error code: ${errorCode}). The stream may be incompatible with your browser.`);
+        } else {
+            this.handleError('VIDEO_PLAYBACK_ERROR', 
+                `Video playback error (Error code: ${errorCode}).`,
+                true);
+        }
+    }
+
+    handleStreamEnded() {
+        if (this.streamEndDetected) {
+            return; // Already handled
+        }
+        
+        console.log('Stream ended - stopping player and showing dialog');
+        this.streamEndDetected = true;
+        
+        // Stop the HLS player to prevent further fragment loading attempts
+        if (this.hlsPlayer) {
+            this.hlsPlayer.stopLoad();
+        }
+        
+        // Stop buffering monitoring
+        this.clearBufferingMonitor();
+        
+        // Show the stream ended dialog
+        this.showStreamEndedDialog();
+    }
+
+    retryStream() {
+        if (this.currentStreamUrl && this.isWatching) {
+            console.log('Retrying stream:', this.currentStreamUrl);
+            const videoElement = document.getElementById('videoPlayerLarge');
+            this.initializePlayer(this.currentStreamUrl, videoElement);
+        }
+    }
+
+    startBufferingMonitor(videoElement) {
+        this.clearBufferingMonitor();
+        
+        this.bufferingCheckInterval = setInterval(() => {
+            if (!videoElement.paused && !videoElement.ended) {
+                const currentTime = videoElement.currentTime;
+                
+                if (currentTime === this.lastBufferTime) {
+                    this.recordBufferingEvent('no_progress');
+                } else {
+                    this.lastBufferTime = currentTime;
+                }
+                
+                // Check if we have too many buffering events
+                this.checkBufferingHealth();
+            }
+        }, 5000); // Check every 5 seconds
+    }
+
+    clearBufferingMonitor() {
+        if (this.bufferingCheckInterval) {
+            clearInterval(this.bufferingCheckInterval);
+            this.bufferingCheckInterval = null;
+        }
+        this.bufferingEvents = [];
+        this.lastBufferTime = 0;
+    }
+
+    recordBufferingEvent(type) {
+        const now = Date.now();
+        this.bufferingEvents.push({ type, timestamp: now });
+        
+        // Keep only events from last 2 minutes
+        this.bufferingEvents = this.bufferingEvents.filter(
+            event => now - event.timestamp < 120000
+        );
+    }
+
+    checkBufferingHealth() {
+        const recentEvents = this.bufferingEvents.filter(
+            event => Date.now() - event.timestamp < 60000 // Last minute
+        );
+        
+        if (recentEvents.length >= 5) {
+            console.warn('Frequent buffering detected, suggesting stream reload');
+            this.showBufferingIssueDialog();
+        }
+    }
+
+    trackFragmentError(data) {
+        const now = Date.now();
+        const { frag } = data;
+        
+        // Track fragment errors
+        this.fragmentErrors.push({
+            timestamp: now,
+            url: frag ? frag.url : 'unknown',
+            details: data.details
+        });
+        
+        // Keep only recent errors (last 30 seconds)
+        this.fragmentErrors = this.fragmentErrors.filter(
+            error => now - error.timestamp < 30000
+        );
+        
+        // Check if we have too many fragment errors in a short time
+        if (this.fragmentErrors.length >= this.maxFragmentErrors) {
+            console.warn('Too many fragment errors detected, likely stream ended or network issues');
+            
+            // Check if errors are all the same URL (likely stream ended)
+            const uniqueUrls = [...new Set(this.fragmentErrors.map(e => e.url))];
+            if (uniqueUrls.length === 1 && uniqueUrls[0].includes('black.ts')) {
+                this.handleStreamEnded();
+            } else if (this.playbackStarted) {
+                // Multiple different fragment errors - likely network/stream issues
+                this.handleError('STREAM_INTERRUPTED', 
+                    'Stream is experiencing connection issues. Multiple fragments failed to load.',
+                    true);
+            } else {
+                // Stream never started and having fragment issues
+                this.handleError('STREAM_FAILED_TO_START',
+                    'Unable to start the stream. Multiple fragments failed to load.');
+            }
+        }
+    }
+
+    closePlayer() {
+        const playerSection = document.getElementById('playerSection');
+        const video = document.getElementById('videoPlayer');
+        
+        // Pause and stop the video
+        if (video) {
+            video.pause();
+            video.currentTime = 0;
+            video.removeAttribute('src');
+            video.load();
+        }
+        
+        // Destroy HLS player
+        if (this.hlsPlayer) {
+            this.hlsPlayer.stopLoad();
+            this.hlsPlayer.detachMedia();
+            this.hlsPlayer.destroy();
+            this.hlsPlayer = null;
+        }
+        
+        playerSection.classList.remove('open');
+        this.isWatching = false;
+    }
+
+    closeVideoPanel() {
+        const mainContainer = document.getElementById('mainContainer');
+        const videoPanel = document.getElementById('videoPanel');
+        const videoLarge = document.getElementById('videoPlayerLarge');
+        
+        // Clear monitoring
+        this.clearBufferingMonitor();
+        this.clearLoadingTimeout();
+        this.clearNetworkMonitoring();
+        
+        // Pause and stop the video
+        if (videoLarge) {
+            videoLarge.pause();
+            videoLarge.currentTime = 0;
+            videoLarge.removeAttribute('src');
+            videoLarge.load();
+        }
+        
+        // Destroy HLS player
+        if (this.hlsPlayer) {
+            this.hlsPlayer.stopLoad();
+            this.hlsPlayer.detachMedia();
+            this.hlsPlayer.destroy();
+            this.hlsPlayer = null;
+        }
+        
+        // Reset state
+        this.currentStreamUrl = null;
+        this.currentStreamName = null;
+        this.playbackStarted = false;
+        this.retryManager.reset();
+        this.streamEndDetected = false;
         this.fragmentErrors = [];
         
-        this.retryManager.reset();
-        this.bufferingManager.reset();
-    }
-
-    forceCleanup() {
-        console.log('Force cleaning up current stream state');
+        // Hide error and 3-column layout
+        this.hideError();
+        mainContainer.classList.remove('watching');
+        videoPanel.style.display = 'none';
         
-        this.hlsManager.destroy();
-        this.cleanupVideoElement();
-        this.networkMonitor.cleanup();
-        this.eventManager.cleanup();
-        this.errorHandler.hideError();
+        // Notify mobile navigation
+        if (window.app && window.app.mobileNav) {
+            window.app.mobileNav.onVideoClosed();
+        }
+        
+        this.isWatching = false;
     }
 
-    cleanupVideoElement() {
+    handleError(errorType, message, showRetry = false) {
+        console.error(`Video Player Error [${errorType}]:`, message);
+        
+        // Stop any ongoing monitoring
+        this.clearBufferingMonitor();
+        this.clearLoadingTimeout();
+        this.clearNetworkMonitoring();
+        
+        // Show appropriate error UI
+        this.showError(message, errorType, showRetry);
+    }
+
+    showError(message, errorType = 'GENERIC', showRetry = false) {
+        const errorDiv = document.getElementById('videoPanelError');
+        const videoContainer = document.querySelector('.video-container-large');
+        
+        if (errorDiv) {
+            let errorHtml = `
+                <div class="error-container">
+                    <div class="error-icon">⚠️</div>
+                    <div class="error-content">
+                        <h3 class="error-title">${this.getErrorTitle(errorType)}</h3>
+                        <p class="error-message">${message}</p>
+                        <div class="error-actions">
+                            ${showRetry ? `
+                                <button class="error-btn retry-btn" onclick="window.app.videoPlayer.retryStream()">
+                                    🔄 Try Again
+                                </button>
+                            ` : ''}
+                            <button class="error-btn fallback-btn" onclick="document.getElementById('fallbackLinkLarge').scrollIntoView()">
+                                🔗 Direct Link
+                            </button>
+                            <button class="error-btn close-btn" onclick="window.app.videoPlayer.closeVideoPanel()">
+                                ❌ Close Stream
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            errorDiv.innerHTML = errorHtml;
+            errorDiv.style.display = 'block';
+            if (videoContainer) {
+                videoContainer.style.display = 'none';
+            }
+        }
+    }
+
+    getErrorTitle(errorType) {
+        switch (errorType) {
+            case 'STREAM_FAILED_TO_START':
+                return 'Stream Failed to Start';
+            case 'STREAM_INTERRUPTED':
+                return 'Stream Connection Lost';
+            case 'STREAM_ENDED':
+                return 'Stream Has Ended';
+            case 'MEDIA_ERROR':
+                return 'Media Format Error';
+            case 'AUTOPLAY_FAILED':
+                return 'Autoplay Blocked';
+            case 'UNSUPPORTED':
+                return 'Unsupported Format';
+            case 'BUFFERING_ISSUES':
+                return 'Frequent Buffering Detected';
+            case 'NO_SIGNAL':
+                return 'No Signal';
+            case 'LOADING_TIMEOUT':
+                return 'Loading Timeout';
+            case 'NO_INTERNET':
+                return 'No Internet Connection';
+            case 'PLAYBACK_FAILED':
+                return 'Playback Failed';
+            default:
+                return 'Playback Error';
+        }
+    }
+
+    showStreamEndedDialog() {
+        const errorDiv = document.getElementById('videoPanelError');
+        const videoContainer = document.querySelector('.video-container-large');
+        
+        if (errorDiv) {
+            const dialogHtml = `
+                <div class="error-container stream-ended">
+                    <div class="error-icon">📺</div>
+                    <div class="error-content">
+                        <h3 class="error-title">Stream Has Ended</h3>
+                        <p class="error-message">
+                            This stream appears to have ended or is temporarily unavailable. 
+                            Would you like to try reloading it?
+                        </p>
+                        <div class="error-actions">
+                            <button class="error-btn retry-btn" onclick="window.app.videoPlayer.reloadStream()">
+                                🔄 Reload Stream
+                            </button>
+                            <button class="error-btn fallback-btn" onclick="document.getElementById('fallbackLinkLarge').scrollIntoView()">
+                                🔗 Direct Link
+                            </button>
+                            <button class="error-btn close-btn" onclick="window.app.videoPlayer.closeVideoPanel()">
+                                ❌ Close Stream
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            errorDiv.innerHTML = dialogHtml;
+            errorDiv.style.display = 'block';
+            if (videoContainer) {
+                videoContainer.style.display = 'none';
+            }
+        }
+    }
+
+    showBufferingIssueDialog() {
+        // Only show if not already showing an error
+        const errorDiv = document.getElementById('videoPanelError');
+        if (errorDiv && errorDiv.style.display === 'none') {
+            const dialogHtml = `
+                <div class="error-container buffering-issues">
+                    <div class="error-icon">⏳</div>
+                    <div class="error-content">
+                        <h3 class="error-title">Frequent Buffering Detected</h3>
+                        <p class="error-message">
+                            The stream is experiencing frequent buffering. This might be due to network issues 
+                            or server problems. Would you like to reload the stream?
+                        </p>
+                        <div class="error-actions">
+                            <button class="error-btn retry-btn" onclick="window.app.videoPlayer.reloadStream(); window.app.videoPlayer.hideError();">
+                                🔄 Reload Stream
+                            </button>
+                            <button class="error-btn continue-btn" onclick="window.app.videoPlayer.hideError()">
+                                ▶️ Continue Watching
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Show as overlay, not replacing video
+            const overlay = document.createElement('div');
+            overlay.className = 'buffering-overlay';
+            overlay.innerHTML = dialogHtml;
+            overlay.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.8);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+            `;
+            
+            const videoContainer = document.querySelector('.video-container-large');
+            if (videoContainer) {
+                videoContainer.style.position = 'relative';
+                videoContainer.appendChild(overlay);
+                
+                // Auto-hide after 10 seconds if user doesn't interact
+                setTimeout(() => {
+                    if (overlay.parentNode) {
+                        overlay.remove();
+                    }
+                }, 10000);
+            }
+        }
+    }
+
+    reloadStream() {
+        if (this.currentStreamUrl && this.isWatching) {
+            console.log('Reloading stream:', this.currentStreamUrl);
+            // Reset error tracking when manually reloading
+            this.bufferingEvents = [];
+            this.fragmentErrors = [];
+            this.retryManager.reset();
+            this.streamEndDetected = false;
+            const videoElement = document.getElementById('videoPlayerLarge');
+            this.hideError();
+            this.initializePlayer(this.currentStreamUrl, videoElement);
+        }
+    }
+
+    hideError() {
+        const errorDiv = document.getElementById('videoPanelError');
+        const videoContainer = document.querySelector('.video-container-large');
+        
+        if (errorDiv) {
+            errorDiv.style.display = 'none';
+            errorDiv.innerHTML = '';
+        }
+        if (videoContainer) {
+            videoContainer.style.display = 'flex';
+        }
+    }
+
+    showLoading(message) {
+        const playerTitle = document.getElementById('playerTitle');
+        if (playerTitle) {
+            playerTitle.textContent = message;
+        }
+    }
+
+    setupFullscreenHandler(videoElement) {
+        if (!videoElement) return;
+
+        const handleFullscreenChange = (e) => {
+            const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
+            
+            if (isFullscreen && (document.fullscreenElement === videoElement || document.webkitFullscreenElement === videoElement || document.mozFullScreenElement === videoElement)) {
+                // When THIS video is fullscreen, hide the app UI elements
+                document.body.classList.add('video-fullscreen');
+            } else {
+                // When exiting fullscreen, restore UI
+                document.body.classList.remove('video-fullscreen');
+            }
+        };
+
+        // Listen for fullscreen changes on the document
+        if (!VideoPlayer.fullscreenListenerAdded) {
+            VideoPlayer.fullscreenListenerAdded = true;
+            document.addEventListener('fullscreenchange', handleFullscreenChange);
+            document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+            document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+        }
+    }
+
+    // Force cleanup to prevent race conditions
+    forceCleanupCurrentStream() {
+        console.log('Force cleaning up current stream state');
+        this.cleanup();
+        
+        // Aggressively reset video element to prevent autoplay race conditions
         const videoLarge = document.getElementById('videoPlayerLarge');
         if (videoLarge) {
             videoLarge.pause();
@@ -94,271 +773,63 @@ export class VideoPlayer {
             videoLarge.removeAttribute('src');
             videoLarge.load();
             
-            // Clean reset by cloning element to remove all event listeners
+            // Clone element to remove all event listeners
             const newVideo = videoLarge.cloneNode(true);
             videoLarge.parentNode.replaceChild(newVideo, videoLarge);
         }
     }
 
-    updateUI(streamUrl, streamName) {
-        const elements = {
-            playerTitle: streamName,
-            videoPanelTitle: streamName,
-            videoInfoTitle: streamName,
-            videoInfoDetails: `Stream URL: ${streamUrl}`
-        };
-        
-        Object.entries(elements).forEach(([id, text]) => {
-            const element = document.getElementById(id);
-            if (element) element.textContent = text;
-        });
-        
-        this.updateFallbackLinks(streamUrl);
-        this.showVideoUI();
-        this.notifyMobileNavigation();
+    // Loading timeout management
+    startLoadingTimeout() {
+        this.clearLoadingTimeout();
+        this.loadingTimeout = setTimeout(() => {
+            const message = navigator.onLine === false ? 
+                'No internet connection detected. Please check your network connection.' :
+                'Stream is taking too long to load. This could be due to network issues or server problems.';
+            this.showError('LOADING_TIMEOUT', message, true);
+        }, this.maxLoadingTime);
     }
 
-    updateFallbackLinks(streamUrl) {
-        ['fallbackUrl', 'fallbackUrlLarge'].forEach(id => {
-            const element = document.getElementById(id);
-            if (element) {
-                element.href = streamUrl;
-                element.textContent = streamUrl;
+    clearLoadingTimeout() {
+        if (this.loadingTimeout) {
+            clearTimeout(this.loadingTimeout);
+            this.loadingTimeout = null;
+        }
+    }
+
+    // Network monitoring
+    startNetworkMonitoring() {
+        this.clearNetworkMonitoring();
+        this.networkCheckInterval = setInterval(() => {
+            if (typeof navigator.onLine !== 'undefined' && !navigator.onLine) {
+                this.showError('NO_INTERNET', 'Your device appears to be offline. Please check your internet connection.');
+                this.clearNetworkMonitoring();
             }
-        });
+        }, 5000);
     }
 
-    showVideoUI() {
-        const mainContainer = document.getElementById('mainContainer');
-        const videoPanel = document.getElementById('videoPanel');
-        
-        if (mainContainer) mainContainer.classList.add('watching');
-        if (videoPanel) videoPanel.style.display = 'flex';
-        
-        ['fallbackLink', 'fallbackLinkLarge'].forEach(id => {
-            const element = document.getElementById(id);
-            if (element) element.style.display = 'block';
-        });
-    }
-
-    notifyMobileNavigation() {
-        if (window.app?.mobileNav) {
-            setTimeout(() => window.app.mobileNav.onVideoReady(), 100);
+    clearNetworkMonitoring() {
+        if (this.networkCheckInterval) {
+            clearInterval(this.networkCheckInterval);
+            this.networkCheckInterval = null;
         }
     }
 
-    initializePlayer(streamUrl) {
-        const videoElement = document.getElementById('videoPlayerLarge');
-        if (!videoElement) return;
-        
-        if (StreamAnalyzer.isBlackTsUrl(streamUrl)) {
-            this.handleNoSignal();
-            return;
-        }
-        
-        if (this.hlsManager.isSupported()) {
-            this.setupHlsPlayer(streamUrl, videoElement);
-        } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-            this.setupNativePlayer(streamUrl, videoElement);
-        } else {
-            this.errorHandler.showError('UNSUPPORTED', 'HLS not supported on this device. Try the direct link below.');
-        }
-    }
-
-    setupHlsPlayer(streamUrl, videoElement) {
-        this.hlsManager.createPlayer();
-        this.hlsManager.loadSource(streamUrl, videoElement);
-        
-        const callbacks = {
-            onManifestParsed: () => this.attemptAutoplay(videoElement, 'HLS manifest loaded'),
-            onManifestLoaded: (event, data) => this.checkForStreamEnd(data),
-            onLevelLoaded: (event, data) => this.checkForStreamEnd(data),
-            onFragLoaded: () => this.onFirstFragmentLoaded(videoElement),
-            onError: (event, data) => this.handleHlsError(data)
-        };
-        
-        this.hlsManager.setupEventListeners(videoElement, callbacks);
-        this.eventManager.setupVideoElementEvents(videoElement);
-    }
-
-    setupNativePlayer(streamUrl, videoElement) {
-        videoElement.src = streamUrl;
-        this.eventManager.setupVideoElementEvents(videoElement);
-        this.attemptAutoplay(videoElement, 'Native player loaded');
-    }
-
-    checkForStreamEnd(data) {
-        if (StreamAnalyzer.isStreamEndedPlaylist(data)) {
-            console.log('Detected stream ended playlist pattern');
-            this.handleNoSignal();
-        }
-    }
-
-    onFirstFragmentLoaded(videoElement) {
-        if (!this.playbackStarted) {
-            this.onPlaybackStarted(videoElement);
-        }
-    }
-
-    onPlaybackStarted(videoElement) {
-        console.log('Playback started successfully');
-        this.playbackStarted = true;
-        this.retryManager.reset();
-        this.networkMonitor.cleanup();
-        this.dismissAutoplayError();
-        this.bufferingManager.startMonitoring(videoElement);
-    }
-
-    startMonitoring() {
-        this.networkMonitor.startLoadingTimeout((message) => {
-            this.errorHandler.showError('LOADING_TIMEOUT', message, true);
-        });
-        
-        this.networkMonitor.startNetworkMonitoring((message) => {
-            this.errorHandler.showError('NO_INTERNET', message);
-        });
-    }
-
-    handleHlsError(data) {
-        const { type, details, fatal, frag } = data;
-        
-        if (frag?.url && StreamAnalyzer.isBlackTsUrl(frag.url)) {
-            this.handleNoSignal();
-            return;
-        }
-        
-        if (details === 'fragLoadError' && !fatal) {
-            this.trackFragmentError(data);
-            return;
-        }
-        
-        if (fatal) {
-            this.handleFatalError(type, details, data);
-        }
-    }
-
-    handleFatalError(type, details, data) {
-        switch (type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-                this.handleNetworkError(details, data);
-                break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-                this.handleMediaError(details, data);
-                break;
-            default:
-                this.errorHandler.showError('HLS_FATAL', `Fatal HLS error: ${details}`);
-        }
-    }
-
-    handleNetworkError(details, data) {
-        if (data.frag?.url && StreamAnalyzer.isBlackTsUrl(data.frag.url)) {
-            this.handleNoSignal();
-            return;
-        }
-        
-        const errorDetails = StreamAnalyzer.analyzeNetworkError(details, data);
-        
-        if (!this.playbackStarted && this.retryManager.canRetry()) {
-            this.scheduleRetry(errorDetails);
-        } else if (!this.playbackStarted) {
-            this.showStartupFailureError(errorDetails);
-        } else {
-            this.showPlaybackInterruptedError(errorDetails);
-        }
-    }
-
-    scheduleRetry(errorDetails) {
-        const delay = this.retryManager.getNextRetryDelay();
-        console.log(`Retrying stream (${this.retryManager.getCurrentAttempt()}/${this.retryManager.getMaxRetries()}) in ${delay}ms`);
-        setTimeout(() => this.retryStream(), delay);
-    }
-
-    showStartupFailureError(errorDetails) {
-        const message = `Unable to start stream after ${this.retryManager.getMaxRetries()} attempts.\n\n` +
-            `**Error:** ${errorDetails.description}\n` +
-            `**Causes:** ${errorDetails.causes}\n` +
-            `**Solutions:** ${errorDetails.solutions}`;
-        this.errorHandler.showError('STREAM_FAILED_TO_START', message);
-    }
-
-    showPlaybackInterruptedError(errorDetails) {
-        const actions = [
-            { class: 'retry-btn', icon: '🔄', text: 'Reload Stream', onclick: 'window.app.videoPlayer.reloadStreamWithOverlay(this);' },
-            { class: 'continue-btn', icon: '▶️', text: 'Keep Trying', onclick: 'window.app.videoPlayer.errorHandler.dismissOverlay()' }
-        ];
-        
-        const message = `Stream connection lost during playback.\n\n` +
-            `**Error:** ${errorDetails.description}\n` +
-            `**Causes:** ${errorDetails.causes}\n` +
-            `**Solutions:** ${errorDetails.solutions}`;
-            
-        this.errorHandler.showOverlayError('STREAM_INTERRUPTED', message, actions);
-    }
-
-    handleMediaError(details, data) {
-        if (details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
-            this.bufferingManager.recordEvent('buffer_stalled');
-            this.bufferingManager.attemptRecovery();
-            return;
-        }
-        
-        if (!this.playbackStarted) {
-            this.errorHandler.showError('MEDIA_ERROR', 'Media format error. This stream format may not be supported.');
-        } else {
-            try {
-                this.hlsManager.recoverMediaError();
-            } catch (e) {
-                this.errorHandler.showError('MEDIA_RECOVERY_FAILED', 'Playback error occurred and recovery failed.', true);
-            }
-        }
-    }
-
-    handleVideoError(error) {
-        const errorCode = error.target.error?.code || 'unknown';
-        const message = `Video ${this.playbackStarted ? 'playback' : 'loading'} error (Code: ${errorCode})`;
-        this.errorHandler.showError('VIDEO_ERROR', message, this.playbackStarted);
-    }
-
-    trackFragmentError(data) {
-        const now = Date.now();
-        this.fragmentErrors.push({
-            timestamp: now,
-            url: data.frag?.url || 'unknown',
-            details: data.details
-        });
-        
-        this.fragmentErrors = this.fragmentErrors.filter(
-            error => now - error.timestamp < 30000
-        );
-        
-        if (this.fragmentErrors.length >= this.maxFragmentErrors) {
-            this.handleExcessiveFragmentErrors();
-        }
-    }
-
-    handleExcessiveFragmentErrors() {
-        const uniqueUrls = [...new Set(this.fragmentErrors.map(e => e.url))];
-        
-        if (uniqueUrls.length === 1 && StreamAnalyzer.isBlackTsUrl(uniqueUrls[0])) {
-            this.handleNoSignal();
-        } else if (this.playbackStarted && this.bufferingManager.recoveryAttempts < this.bufferingManager.maxRecoveryAttempts) {
-            this.bufferingManager.attemptRecovery();
-            this.fragmentErrors = this.fragmentErrors.slice(-3);
-        } else {
-            const message = `Persistent connection issues. ${this.fragmentErrors.length} fragment errors in 30 seconds.`;
-            this.errorHandler.showError('STREAM_INTERRUPTED', message, true);
-        }
-    }
-
+    // Handle no signal (black.ts streams)
     handleNoSignal() {
         if (this.streamEndDetected) return;
         
         console.log('No signal detected');
         this.streamEndDetected = true;
-        this.hlsManager.stopLoad();
-        this.networkMonitor.cleanup();
         
-        this.errorHandler.showError('NO_SIGNAL', 
+        if (this.hlsPlayer) {
+            this.hlsPlayer.stopLoad();
+        }
+        
+        this.clearLoadingTimeout();
+        this.clearNetworkMonitoring();
+        
+        this.showError('NO_SIGNAL', 
             'The stream is currently showing no signal. This usually means:\n\n' +
             '• The broadcast has ended or is temporarily offline\n' +
             '• Technical difficulties at the source\n' +
@@ -366,6 +837,8 @@ export class VideoPlayer {
             'You can try reloading to check if the signal has returned.');
     }
 
+
+    // Improved autoplay handling
     attemptAutoplay(videoElement, context) {
         videoElement.play().then(() => {
             console.log('Autoplay successful');
@@ -375,54 +848,26 @@ export class VideoPlayer {
     }
 
     handleAutoplayFailure(videoElement, error, context) {
-        if (this.playbackStarted) return;
-        
-        const reason = StreamAnalyzer.getAutoplayFailureReason(error);
-        this.showAutoplayDialog(reason, context);
-    }
-
-    showAutoplayDialog(reason, context) {
         if (this.playbackStarted || this.autoplayErrorShown) return;
         
         this.autoplayErrorShown = true;
         
-        const message = `**Reason:** ${reason}\n\n**Solution:** Your browser requires user interaction to start video playback. Click the play button below.`;
-        
-        const errorDiv = document.getElementById('videoPanelError');
-        if (errorDiv) {
-            const dialogHtml = `
-                <div class="error-container autoplay-blocked">
-                    <div class="error-icon">▶️</div>
-                    <div class="error-content">
-                        <h3 class="error-title">Autoplay Blocked</h3>
-                        <p class="error-message">${message.replace(/\n/g, '<br>')}</p>
-                        <div class="error-actions">
-                            <button class="error-btn play-btn" onclick="window.app.videoPlayer.manualPlay()">
-                                ▶️ Play Stream
-                            </button>
-                            <button class="error-btn fallback-btn" onclick="document.getElementById('fallbackLinkLarge').scrollIntoView()">
-                                🔗 Direct Link
-                            </button>
-                            <button class="error-btn close-btn" onclick="window.app.videoPlayer.closeVideoPanel()">
-                                ❌ Close Stream
-                            </button>
-                        </div>
-                        <div class="error-details">
-                            <small>Context: ${context}</small>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            errorDiv.innerHTML = dialogHtml;
-            errorDiv.style.display = 'block';
-            
-            const videoContainer = document.querySelector('.video-container-large');
-            if (videoContainer) {
-                videoContainer.style.display = 'flex';
-            }
+        let reason = 'Unknown autoplay failure reason';
+        if (error.name === 'NotAllowedError') {
+            reason = 'Browser autoplay policy prevents automatic playback';
+        } else if (error.name === 'AbortError') {
+            reason = 'Playback was interrupted (possibly by another stream starting)';
+        } else if (error.name === 'NotSupportedError') {
+            reason = 'Video format or codec not supported';
+        } else if (error.message.includes('user activation')) {
+            reason = 'User interaction required by browser policy';
         }
         
+        const message = `**Reason:** ${reason}\n\n**Solution:** Your browser requires user interaction to start video playback. Click the play button below.`;
+        
+        this.showAutoplayBlockedDialog(message, context);
+        
+        // Auto-dismiss if playback starts
         setTimeout(() => {
             if (this.playbackStarted && this.autoplayErrorShown) {
                 this.dismissAutoplayError();
@@ -430,18 +875,55 @@ export class VideoPlayer {
         }, 10000);
     }
 
+    showAutoplayBlockedDialog(message, context) {
+        const errorDiv = document.getElementById('videoPanelError');
+        if (!errorDiv) return;
+        
+        const dialogHtml = `
+            <div class="error-container autoplay-blocked">
+                <div class="error-icon">▶️</div>
+                <div class="error-content">
+                    <h3 class="error-title">Autoplay Blocked</h3>
+                    <p class="error-message">${message.replace(/\n/g, '<br>')}</p>
+                    <div class="error-actions">
+                        <button class="error-btn play-btn" onclick="window.app.videoPlayer.manualPlay()">
+                            ▶️ Play Stream
+                        </button>
+                        <button class="error-btn fallback-btn" onclick="document.getElementById('fallbackLinkLarge').scrollIntoView()">
+                            🔗 Direct Link
+                        </button>
+                        <button class="error-btn close-btn" onclick="window.app.videoPlayer.closeVideoPanel()">
+                            ❌ Close Stream
+                        </button>
+                    </div>
+                    <div class="error-details">
+                        <small>Context: ${context}</small>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        errorDiv.innerHTML = dialogHtml;
+        errorDiv.style.display = 'block';
+        
+        const videoContainer = document.querySelector('.video-container-large');
+        if (videoContainer) {
+            videoContainer.style.display = 'flex';
+        }
+    }
+
     manualPlay() {
         const videoElement = document.getElementById('videoPlayerLarge');
         if (!videoElement) return;
         
-        this.errorHandler.hideError();
+        this.hideError();
         
         videoElement.play().then(() => {
             if (!this.playbackStarted) {
                 this.onPlaybackStarted(videoElement);
             }
         }).catch(e => {
-            this.errorHandler.showError('PLAYBACK_FAILED', 
+            this.showError('PLAYBACK_FAILED', 
                 `Unable to start playback: ${e.message}. This may be a stream or browser compatibility issue.`, true);
         });
     }
@@ -449,161 +931,46 @@ export class VideoPlayer {
     dismissAutoplayError() {
         if (this.autoplayErrorShown) {
             this.autoplayErrorShown = false;
-            this.errorHandler.hideError();
+            this.hideError();
         }
     }
 
-    // Stream control methods
-    retryStream() {
-        if (!this.currentStreamUrl || !this.isWatching) return;
-        
-        this.bufferingManager.reset();
-        this.errorHandler.hideError();
-        this.showLoadingState();
-        this.initializePlayer(this.currentStreamUrl);
-    }
-
-    reloadStream() {
-        if (!this.currentStreamUrl || !this.isWatching) return;
-        
-        this.retryManager.reset();
-        this.bufferingManager.reset();
-        this.fragmentErrors = [];
-        this.errorHandler.hideError();
-        this.showLoadingState();
-        this.initializePlayer(this.currentStreamUrl);
-    }
-
-    reloadStreamInBackground() {
-        if (!this.currentStreamUrl || !this.isWatching) return;
-        
-        const videoElement = document.getElementById('videoPlayerLarge');
-        const currentTime = videoElement?.currentTime || 0;
-        
-        this.bufferingManager.reset();
-        this.fragmentErrors = [];
-        this.initializePlayer(this.currentStreamUrl);
-        
-        if (currentTime > 0) {
-            setTimeout(() => {
-                if (videoElement && videoElement.readyState >= 2) {
-                    videoElement.currentTime = Math.max(0, currentTime - 5);
-                }
-            }, 2000);
-        }
-    }
-
-    reloadStreamWithOverlay(buttonElement) {
-        const overlay = buttonElement.closest('.buffering-overlay');
-        if (overlay) {
-            overlay.innerHTML = `
-                <div class="error-container loading-state">
-                    <div class="error-icon">🔄</div>
-                    <div class="error-content">
-                        <h3 class="error-title">Reloading Stream</h3>
-                        <p class="error-message">Restarting stream connection...</p>
-                        <div class="loading-spinner"></div>
-                    </div>
-                </div>
-            `;
-            setTimeout(() => overlay.remove(), 5000);
-        }
-        
-        this.reloadStreamInBackground();
-    }
-
-    showLoadingState() {
-        const errorDiv = document.getElementById('videoPanelError');
-        const videoContainer = document.querySelector('.video-container-large');
-        
-        if (errorDiv) {
-            errorDiv.innerHTML = `
-                <div class="error-container loading-state">
-                    <div class="error-icon">⏳</div>
-                    <div class="error-content">
-                        <h3 class="error-title">Loading Stream</h3>
-                        <p class="error-message">Restarting stream playback, please wait...</p>
-                        <div class="loading-spinner"></div>
-                    </div>
-                </div>
-            `;
-            errorDiv.style.display = 'block';
-            if (videoContainer) {
-                videoContainer.style.display = 'flex';
-            }
-        }
-    }
-
-    // Cleanup methods
-    closeVideoPanel() {
-        this.forceCleanup();
-        
-        const mainContainer = document.getElementById('mainContainer');
-        const videoPanel = document.getElementById('videoPanel');
-        
-        if (mainContainer) mainContainer.classList.remove('watching');
-        if (videoPanel) videoPanel.style.display = 'none';
-        
-        if (window.app?.mobileNav) {
-            window.app.mobileNav.onVideoClosed();
-        }
-        
-        this.resetState();
-    }
-
+    // Public method to cleanup resources
     cleanup() {
-        this.forceCleanup();
-        this.resetState();
-    }
-
-    resetState() {
+        const videoLarge = document.getElementById('videoPlayerLarge');
+        const video = document.getElementById('videoPlayer');
+        
+        // Clear monitoring
+        this.clearBufferingMonitor();
+        this.clearLoadingTimeout();
+        this.clearNetworkMonitoring();
+        
+        // Stop all video elements
+        [videoLarge, video].forEach(v => {
+            if (v) {
+                v.pause();
+                v.currentTime = 0;
+                v.removeAttribute('src');
+                v.load();
+            }
+        });
+        
+        // Destroy HLS player
+        if (this.hlsPlayer) {
+            this.hlsPlayer.stopLoad();
+            this.hlsPlayer.detachMedia();
+            this.hlsPlayer.destroy();
+            this.hlsPlayer = null;
+        }
+        
+        // Reset all state
         this.currentStreamUrl = null;
         this.currentStreamName = null;
         this.playbackStarted = false;
-        this.streamEndDetected = false;
-        this.autoplayErrorShown = false;
-        this.fragmentErrors = [];
         this.retryManager.reset();
-        this.bufferingManager.reset();
+        this.streamEndDetected = false;
+        this.fragmentErrors = [];
         this.isWatching = false;
     }
-
-    // Backward compatibility methods
-    showError(errorType, message, showRetry = false) {
-        this.errorHandler.showError(errorType, message, showRetry);
-    }
-
-    hideError() {
-        this.errorHandler.hideError();
-    }
-
-    showLoading(message) {
-        this.showLoadingState();
-    }
-
-    closePlayer() {
-        this.closeVideoPanel();
-    }
-
-    // Fullscreen handling
-    setupFullscreenHandler(videoElement) {
-        if (!videoElement || VideoPlayer.fullscreenListenerAdded) return;
-        
-        VideoPlayer.fullscreenListenerAdded = true;
-        
-        const handleFullscreenChange = () => {
-            const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
-            const isThisVideo = [document.fullscreenElement, document.webkitFullscreenElement, document.mozFullScreenElement].includes(videoElement);
-            
-            if (isFullscreen && isThisVideo) {
-                document.body.classList.add('video-fullscreen');
-            } else {
-                document.body.classList.remove('video-fullscreen');
-            }
-        };
-        
-        ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange'].forEach(event => {
-            document.addEventListener(event, handleFullscreenChange);
-        });
-    }
 }
+

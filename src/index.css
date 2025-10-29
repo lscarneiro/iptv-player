@@ -1661,3 +1661,24 @@ body.video-fullscreen .video-player-large {
     }
 }
 
+/* Additional error type styles */
+.error-container.no-signal {
+    border-left-color: #FF5722;
+}
+
+.error-container.loading-timeout {
+    border-left-color: #FF9800;
+}
+
+.error-container.no-internet {
+    border-left-color: #F44336;
+}
+
+.error-container.autoplay-blocked {
+    border-left-color: #2196F3;
+}
+
+.error-container.autoplay-blocked .error-icon {
+    color: #2196F3;
+}
+
