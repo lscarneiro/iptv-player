@@ -189,6 +189,24 @@ export class VideoPlayer {
                 this.attemptAutoplay(videoElement, 'HLS manifest loaded');
             });
             
+            this.hlsPlayer.on(Hls.Events.MANIFEST_LOADED, (event, data) => {
+                // Check if this is a "stream ended" playlist pattern
+                if (this.isStreamEndedPlaylist(data)) {
+                    console.log('Detected stream ended playlist pattern');
+                    this.handleNoSignal();
+                    return;
+                }
+            });
+            
+            this.hlsPlayer.on(Hls.Events.LEVEL_LOADED, (event, data) => {
+                // Also check when playlist updates are received
+                if (this.isStreamEndedPlaylist(data)) {
+                    console.log('Playlist updated to stream ended pattern');
+                    this.handleNoSignal();
+                    return;
+                }
+            });
+            
             this.hlsPlayer.on(Hls.Events.FRAG_LOADED, () => {
                 if (!this.playbackStarted) {
                     this.onPlaybackStarted(videoElement);
@@ -357,6 +375,73 @@ export class VideoPlayer {
             '• Technical difficulties at the source\n' +
             '• The channel is between programs\n\n' +
             'You can try reloading to check if the signal has returned.');
+    }
+
+    isStreamEndedPlaylist(manifestData) {
+        try {
+            // Check multiple possible data structures from HLS.js
+            const manifest = manifestData.details || manifestData.level || manifestData;
+            
+            // Look for the classic "stream ended" pattern:
+            // 1. Has EXT-X-ENDLIST (indicates stream has ended)
+            // 2. Contains only black.ts segments  
+            // 3. Usually has very few segments (often just 1)
+            
+            // Check if this is a non-live playlist (has ENDLIST)
+            if (manifest && (manifest.live === false || manifest.endlist === true)) {
+                const segments = manifest.segments || manifest.details?.segments || [];
+                
+                if (segments.length === 0) {
+                    return false; // Empty playlist, not necessarily ended
+                }
+                
+                // Check if all segments are black.ts (definitive stream ended pattern)
+                const blackSegments = segments.filter(segment => 
+                    segment && segment.url && segment.url.includes('black.ts')
+                );
+                
+                if (blackSegments.length === segments.length && segments.length > 0) {
+                    console.log(`Detected playlist with ${segments.length} black.ts segments and ENDLIST - stream has definitely ended`);
+                    return true;
+                }
+                
+                // Check for mixed playlist with majority black.ts segments (likely stream ended)
+                if (blackSegments.length > 0 && segments.length <= 5) {
+                    const blackRatio = blackSegments.length / segments.length;
+                    if (blackRatio >= 0.5) { // 50% or more are black.ts
+                        console.log(`Detected short playlist (${segments.length} segments) with ${blackSegments.length} black.ts segments and ENDLIST - likely stream ended`);
+                        return true;
+                    }
+                }
+                
+                // Special case: single segment playlist with black.ts
+                if (segments.length === 1 && blackSegments.length === 1) {
+                    console.log('Detected single black.ts segment with ENDLIST - stream ended');
+                    return true;
+                }
+            }
+            
+            // Also check the manifest URL itself
+            const manifestUrl = manifestData.url || this.currentStreamUrl || '';
+            if (manifestUrl.includes('black.ts')) {
+                console.log('Manifest URL contains black.ts - stream ended');
+                return true;
+            }
+            
+            // Check if the manifest content indicates stream end
+            if (manifestData.networkDetails && manifestData.networkDetails.responseText) {
+                const manifestText = manifestData.networkDetails.responseText;
+                if (manifestText.includes('#EXT-X-ENDLIST') && manifestText.includes('black.ts')) {
+                    console.log('Manifest content contains ENDLIST and black.ts - stream ended');
+                    return true;
+                }
+            }
+            
+        } catch (error) {
+            console.warn('Error analyzing manifest for stream end pattern:', error);
+        }
+        
+        return false;
     }
 
     attemptAutoplay(videoElement, context) {
