@@ -22,6 +22,10 @@ export class IPTVApp {
         this.currentCategory = null;
         this.currentCategoryName = 'All Channels';
         
+        // AbortControllers for cancelling ongoing requests
+        this.categoryLoadController = null;
+        this.streamLoadController = null;
+        
         this.init();
     }
 
@@ -234,6 +238,12 @@ export class IPTVApp {
     // Category Management
     async loadCategories(forceRefresh = false) {
         try {
+            // Cancel any ongoing category loading
+            if (this.categoryLoadController) {
+                this.categoryLoadController.abort();
+            }
+            this.categoryLoadController = new AbortController();
+            
             this.categoryList.showLoading('Loading categories...');
             
             let categories = null;
@@ -243,7 +253,7 @@ export class IPTVApp {
             }
             
             if (!categories) {
-                categories = await this.apiService.getLiveCategories();
+                categories = await this.apiService.getLiveCategories(this.categoryLoadController.signal);
                 // Sort categories by name before caching
                 categories = categories.sort((a, b) => {
                     const nameA = a.category_name ? a.category_name.toLowerCase() : '';
@@ -268,7 +278,7 @@ export class IPTVApp {
             
             if (!allStreams) {
                 try {
-                    allStreams = await this.apiService.getLiveStreams(null);
+                    allStreams = await this.apiService.getLiveStreams(null, this.categoryLoadController.signal);
                     allChannelsCount = allStreams ? allStreams.length : 0;
                     
                     if (allStreams) {
@@ -280,6 +290,9 @@ export class IPTVApp {
                         await this.storageService.saveToIndexedDB('streams', 'all_streams', sortedStreams);
                     }
                 } catch (error) {
+                    if (error.message === 'Request cancelled') {
+                        return; // Don't show error for cancelled requests
+                    }
                     console.warn('Could not get all channels count:', error);
                 }
             }
@@ -287,11 +300,22 @@ export class IPTVApp {
             this.categoryList.render(categories, allChannelsCount);
             
         } catch (error) {
+            if (error.message === 'Request cancelled') {
+                return; // Don't show error for cancelled requests
+            }
             this.categoryList.showError(`Failed to load categories: ${error.message}`);
+        } finally {
+            // Clear the controller reference when done
+            this.categoryLoadController = null;
         }
     }
 
     async handleCategorySelect(categoryId) {
+        // Cancel any ongoing stream loading first
+        if (this.streamLoadController) {
+            this.streamLoadController.abort();
+        }
+        
         this.currentCategory = categoryId;
         
         // Scroll to top of streams container on category change (especially important for mobile)
@@ -309,7 +333,9 @@ export class IPTVApp {
             
             if (!countSpan) {
                 try {
-                    const streams = await this.apiService.getLiveStreams(categoryId);
+                    // Create a separate controller for this count request
+                    const countController = new AbortController();
+                    const streams = await this.apiService.getLiveStreams(categoryId, countController.signal);
                     const count = streams ? streams.length : 0;
                     
                     const nameSpan = categoryItem.querySelector('span:first-child');
@@ -325,7 +351,9 @@ export class IPTVApp {
                     
                     await this.storageService.saveToIndexedDB('categories', 'live_categories', this.categories);
                 } catch (error) {
-                    console.error('Failed to get category count:', error);
+                    if (error.message !== 'Request cancelled') {
+                        console.error('Failed to get category count:', error);
+                    }
                 }
             }
         }
@@ -348,6 +376,12 @@ export class IPTVApp {
         if (!this.currentCategory) return;
         
         try {
+            // Cancel any ongoing stream loading
+            if (this.streamLoadController) {
+                this.streamLoadController.abort();
+            }
+            this.streamLoadController = new AbortController();
+            
             // Show the right panel header
             const rightPanelHeader = document.querySelector('.right-panel .panel-header');
             if (rightPanelHeader) {
@@ -365,7 +399,8 @@ export class IPTVApp {
             
             if (!streams && forceRefresh) {
                 streams = await this.apiService.getLiveStreams(
-                    this.currentCategory === 'all' ? null : this.currentCategory
+                    this.currentCategory === 'all' ? null : this.currentCategory,
+                    this.streamLoadController.signal
                 );
                 streams = streams.sort((a, b) => {
                     const nameA = a.name ? a.name.toLowerCase() : '';
@@ -377,7 +412,8 @@ export class IPTVApp {
             
             if (!streams && !forceRefresh) {
                 streams = await this.apiService.getLiveStreams(
-                    this.currentCategory === 'all' ? null : this.currentCategory
+                    this.currentCategory === 'all' ? null : this.currentCategory,
+                    this.streamLoadController.signal
                 );
                 streams = streams.sort((a, b) => {
                     const nameA = a.name ? a.name.toLowerCase() : '';
@@ -396,7 +432,13 @@ export class IPTVApp {
             this.mobileNav.refresh();
             
         } catch (error) {
+            if (error.message === 'Request cancelled') {
+                return; // Don't show error for cancelled requests
+            }
             this.streamList.showError(`Failed to load streams: ${error.message}`);
+        } finally {
+            // Clear the controller reference when done
+            this.streamLoadController = null;
         }
     }
 
@@ -445,6 +487,9 @@ export class IPTVApp {
             // render will call: this.allStreams = filteredStreams where filteredStreams = filtered (after marker filter)
             this.streamList.render(filtered, this.currentCategoryName);
         } catch (error) {
+            if (error.message === 'Request cancelled') {
+                return; // Don't show error for cancelled requests
+            }
             console.error('Error filtering streams:', error);
             // Fallback: reload streams
             await this.loadStreams(false);
