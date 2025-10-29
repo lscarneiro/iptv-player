@@ -451,6 +451,25 @@ export class VideoPlayer {
         }
     }
 
+    // Backward compatibility methods
+    showError(errorType, message, showRetry = false) {
+        this.errorHandler.showError(errorType, message, showRetry);
+    }
+
+    hideError() {
+        this.errorHandler.hideError();
+    }
+
+    showLoading(message) {
+        // Legacy method - redirect to showLoadingState
+        this.showLoadingState();
+    }
+
+    closePlayer() {
+        // Legacy method - redirect to closeVideoPanel
+        this.closeVideoPanel();
+    }
+
     retryStream() {
         if (!this.currentStreamUrl || !this.isWatching) return;
         
