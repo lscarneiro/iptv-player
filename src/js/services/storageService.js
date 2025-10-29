@@ -121,5 +121,14 @@ export class StorageService {
         const saved = localStorage.getItem('filterMarkers');
         return saved !== null ? saved === 'true' : true; // Default to true
     }
+
+    saveM3u8Logging(value) {
+        localStorage.setItem('enableM3u8Logging', value);
+    }
+
+    loadM3u8Logging() {
+        const saved = localStorage.getItem('enableM3u8Logging');
+        return saved !== null ? saved === 'true' : false; // Default to false
+    }
 }
 

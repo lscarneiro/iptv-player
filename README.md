@@ -53,6 +53,7 @@ src/
   - HLS.js integration
   - Video panel management
   - Error handling and fallback links
+  - M3U8 tag logging for debugging ad-breaks and stream issues
   
 - **userInfo.js**: Displays user account information
   - Account details
@@ -87,6 +88,51 @@ The main `IPTVApp` class:
 ## Usage
 
 The application loads automatically when `index.html` is opened in a browser. It uses ES6 modules, so ensure you're serving from a local web server (not opening the file directly).
+
+## M3U8 Debug Logging
+
+The application includes an optional M3U8 tag logging feature for debugging stream issues, especially during ad-breaks:
+
+### How to Use
+1. Open the Settings panel (gear icon in top-right)
+2. Check "Enable M3U8 tag logging to console"
+3. Start playing a stream
+4. Open browser Developer Tools (F12) → Console tab
+5. View detailed M3U8 tag information in real-time
+
+### What Gets Logged
+- **Raw M3U8 manifest content**: Complete playlist files with all tags
+- **Fragment details**: Information about each video segment, including special properties
+- **Ad-break indicators**: Discontinuity markers and program date-time changes
+- **Quality switches**: Level changes that might occur during ads
+- **Audio/subtitle track changes**: Track switches that could indicate ad insertion
+
+### Console Output Examples
+```
+📄 Raw M3U8 Content from https://example.com/playlist.m3u8
+🏷️ Found 6 M3U8 tags:
+#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:10
+#EXT-X-MEDIA-SEQUENCE:12345
+#EXT-X-DISCONTINUITY
+#EXT-X-PROGRAM-DATE-TIME:2023-10-29T12:00:00.000Z
+
+🎬 Fragment 123 loaded with special properties
+📋 Tags:
+  #EXT-X-DISCONTINUITY
+  #EXT-X-PROGRAM-DATE-TIME:2023-10-29T12:00:00.000Z
+⚠️ Discontinuity detected (possible ad-break)
+🕐 Program Date Time: 2023-10-29T12:00:00.000Z
+```
+
+This feature is particularly useful for:
+- Debugging ad-break issues
+- Understanding stream structure
+- Identifying unsupported M3U8 tags
+- Troubleshooting playback problems
+
+**Note**: This feature can generate verbose console output. Disable it when not needed for debugging.
 
 ## Migration Notes
 

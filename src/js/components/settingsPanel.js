@@ -4,10 +4,15 @@ export class SettingsPanel {
     constructor() {
         this.panel = document.getElementById('settingsPanel');
         this.onSubmit = null;
+        this.onM3u8LoggingChange = null;
     }
 
     setOnSubmit(callback) {
         this.onSubmit = callback;
+    }
+
+    setOnM3u8LoggingChange(callback) {
+        this.onM3u8LoggingChange = callback;
     }
 
     setupEventListeners() {
@@ -26,6 +31,12 @@ export class SettingsPanel {
                 const username = document.getElementById('username').value.trim();
                 const password = document.getElementById('password').value.trim();
                 this.onSubmit(serverUrl, username, password);
+            }
+        });
+
+        document.getElementById('enableM3u8Logging').addEventListener('change', (e) => {
+            if (this.onM3u8LoggingChange) {
+                this.onM3u8LoggingChange(e.target.checked);
             }
         });
     }
@@ -48,6 +59,10 @@ export class SettingsPanel {
         document.getElementById('serverUrl').value = serverUrl || '';
         document.getElementById('username').value = username || '';
         document.getElementById('password').value = password || '';
+    }
+
+    setM3u8LoggingState(enabled) {
+        document.getElementById('enableM3u8Logging').checked = enabled;
     }
 }
 
