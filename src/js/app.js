@@ -328,6 +328,9 @@ export class IPTVApp {
             toggleClearButton('clearStreamSearch', '');
         }
         
+        // Reset search state in StreamList component
+        this.streamList.resetSearch();
+        
         // Scroll to top of streams container on category change (especially important for mobile)
         setTimeout(() => {
             const streamsContainer = document.getElementById('streamsContainer');

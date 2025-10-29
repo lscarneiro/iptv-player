@@ -7,7 +7,7 @@ export class StreamList {
         this.container = document.getElementById(containerId);
         this.allStreams = []; // Original unfiltered streams
         this.filteredStreams = []; // Currently filtered streams
-        this.visibleStreams = 50;
+        this.visibleStreams = 30;
         this.currentPlayingStreamId = null;
         this.filterMarkers = true;
         this.currentCategoryName = 'All Channels';
@@ -60,7 +60,7 @@ export class StreamList {
         if (hasMore) {
             this.isLoading = true;
             const previousVisible = this.visibleStreams;
-            this.visibleStreams += 50;
+            this.visibleStreams += 30;
             
             // Only re-render the additional items to prevent full re-render
             this.renderAdditionalItems(previousVisible);
@@ -84,6 +84,13 @@ export class StreamList {
         if (this.isDestroyed) return false;
         if (requestId !== null && requestId !== this.renderRequestId) return false;
         return true;
+    }
+
+    // Reset search state (useful when changing categories)
+    resetSearch() {
+        this.currentSearchTerm = '';
+        this.visibleStreams = 30;
+        this.isLoading = false;
     }
 
     // Cleanup method
@@ -389,7 +396,7 @@ export class StreamList {
         
         // Reset loading state and visible count when filtering
         this.isLoading = false;
-        this.visibleStreams = 50;
+        this.visibleStreams = 30;
         
         // Apply search filter to original streams
         if (!term) {
