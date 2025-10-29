@@ -1,4 +1,6 @@
 // Error Handler Module - Manages all error states and UI
+import { UIHelpers } from '../utils/uiHelpers.js';
+
 export class ErrorHandler {
     constructor(videoPlayer) {
         this.videoPlayer = videoPlayer;

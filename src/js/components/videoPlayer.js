@@ -1,33 +1,37 @@
-// Simplified Video Player Component
+// Refactored Video Player - Core orchestration with single responsibility
 import { ErrorHandler } from './errorHandler.js';
 import { RetryManager } from './retryManager.js';
 import { BufferingManager } from './bufferingManager.js';
+import { HlsPlayerManager } from './hlsPlayerManager.js';
+import { StreamAnalyzer } from './streamAnalyzer.js';
+import { VideoEventManager } from './videoEventManager.js';
+import { NetworkMonitor } from '../utils/networkMonitor.js';
 
 export class VideoPlayer {
     constructor() {
-        this.hlsPlayer = null;
+        this.initializeState();
+        this.initializeManagers();
+        this.initializeFullscreenHandlers();
+    }
+
+    initializeState() {
         this.isWatching = false;
         this.currentStreamUrl = null;
         this.currentStreamName = null;
         this.playbackStarted = false;
         this.streamEndDetected = false;
         this.autoplayErrorShown = false;
-        
-        // Initialize managers
+        this.fragmentErrors = [];
+        this.maxFragmentErrors = 8;
+    }
+
+    initializeManagers() {
         this.errorHandler = new ErrorHandler(this);
         this.retryManager = new RetryManager(5);
         this.bufferingManager = new BufferingManager(this, this.errorHandler);
-        
-        // Network monitoring
-        this.loadingTimeout = null;
-        this.maxLoadingTime = 30000;
-        this.networkCheckInterval = null;
-        
-        // Fragment error tracking
-        this.fragmentErrors = [];
-        this.maxFragmentErrors = 8;
-        
-        this.initializeFullscreenHandlers();
+        this.hlsManager = new HlsPlayerManager(this);
+        this.eventManager = new VideoEventManager(this);
+        this.networkMonitor = new NetworkMonitor();
     }
 
     initializeFullscreenHandlers() {
@@ -53,37 +57,36 @@ export class VideoPlayer {
         
         this.forceCleanup();
         this.updateUI(streamUrl, streamName);
+        this.resetStateForNewStream(streamUrl, streamName);
+        this.initializePlayer(streamUrl);
+        this.startMonitoring();
         
-        // Reset state
+        this.isWatching = true;
+    }
+
+    resetStateForNewStream(streamUrl, streamName) {
         this.currentStreamUrl = streamUrl;
         this.currentStreamName = streamName;
         this.playbackStarted = false;
         this.streamEndDetected = false;
         this.autoplayErrorShown = false;
-        this.retryManager.reset();
-        this.bufferingManager.reset();
         this.fragmentErrors = [];
         
-        this.initializePlayer(streamUrl);
-        this.startLoadingTimeout();
-        this.startNetworkMonitoring();
-        this.isWatching = true;
+        this.retryManager.reset();
+        this.bufferingManager.reset();
     }
 
     forceCleanup() {
         console.log('Force cleaning up current stream state');
         
-        if (this.hlsPlayer) {
-            try {
-                this.hlsPlayer.stopLoad();
-                this.hlsPlayer.detachMedia();
-                this.hlsPlayer.destroy();
-            } catch (e) {
-                console.warn('Error destroying HLS player:', e);
-            }
-            this.hlsPlayer = null;
-        }
-        
+        this.hlsManager.destroy();
+        this.cleanupVideoElement();
+        this.networkMonitor.cleanup();
+        this.eventManager.cleanup();
+        this.errorHandler.hideError();
+    }
+
+    cleanupVideoElement() {
         const videoLarge = document.getElementById('videoPlayerLarge');
         if (videoLarge) {
             videoLarge.pause();
@@ -91,13 +94,10 @@ export class VideoPlayer {
             videoLarge.removeAttribute('src');
             videoLarge.load();
             
-            // Clean reset by cloning element
+            // Clean reset by cloning element to remove all event listeners
             const newVideo = videoLarge.cloneNode(true);
             videoLarge.parentNode.replaceChild(newVideo, videoLarge);
         }
-        
-        this.clearAllMonitoring();
-        this.errorHandler.hideError();
     }
 
     updateUI(streamUrl, streamName) {
@@ -113,7 +113,12 @@ export class VideoPlayer {
             if (element) element.textContent = text;
         });
         
-        // Update fallback links
+        this.updateFallbackLinks(streamUrl);
+        this.showVideoUI();
+        this.notifyMobileNavigation();
+    }
+
+    updateFallbackLinks(streamUrl) {
         ['fallbackUrl', 'fallbackUrlLarge'].forEach(id => {
             const element = document.getElementById(id);
             if (element) {
@@ -121,10 +126,12 @@ export class VideoPlayer {
                 element.textContent = streamUrl;
             }
         });
-        
-        // Show UI
+    }
+
+    showVideoUI() {
         const mainContainer = document.getElementById('mainContainer');
         const videoPanel = document.getElementById('videoPanel');
+        
         if (mainContainer) mainContainer.classList.add('watching');
         if (videoPanel) videoPanel.style.display = 'flex';
         
@@ -132,8 +139,9 @@ export class VideoPlayer {
             const element = document.getElementById(id);
             if (element) element.style.display = 'block';
         });
-        
-        // Notify mobile navigation
+    }
+
+    notifyMobileNavigation() {
         if (window.app?.mobileNav) {
             setTimeout(() => window.app.mobileNav.onVideoReady(), 100);
         }
@@ -143,13 +151,12 @@ export class VideoPlayer {
         const videoElement = document.getElementById('videoPlayerLarge');
         if (!videoElement) return;
         
-        // Check for no signal
-        if (streamUrl.includes('black.ts')) {
+        if (StreamAnalyzer.isBlackTsUrl(streamUrl)) {
             this.handleNoSignal();
             return;
         }
         
-        if (window.Hls && Hls.isSupported()) {
+        if (this.hlsManager.isSupported()) {
             this.setupHlsPlayer(streamUrl, videoElement);
         } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
             this.setupNativePlayer(streamUrl, videoElement);
@@ -159,109 +166,63 @@ export class VideoPlayer {
     }
 
     setupHlsPlayer(streamUrl, videoElement) {
-        this.hlsPlayer = new Hls({
-            enableWorker: true,
-            lowLatencyMode: true,
-            backBufferLength: 90,
-            maxLoadingDelay: 4,
-            maxBufferLength: 30,
-            fragLoadingTimeOut: 20000,
-            manifestLoadingTimeOut: 10000,
-            fragLoadingMaxRetry: 2,
-            manifestLoadingMaxRetry: 1
-        });
+        this.hlsManager.createPlayer();
+        this.hlsManager.loadSource(streamUrl, videoElement);
         
-        this.hlsPlayer.loadSource(streamUrl);
-        this.hlsPlayer.attachMedia(videoElement);
+        const callbacks = {
+            onManifestParsed: () => this.attemptAutoplay(videoElement, 'HLS manifest loaded'),
+            onManifestLoaded: (event, data) => this.checkForStreamEnd(data),
+            onLevelLoaded: (event, data) => this.checkForStreamEnd(data),
+            onFragLoaded: () => this.onFirstFragmentLoaded(videoElement),
+            onError: (event, data) => this.handleHlsError(data)
+        };
         
-        this.setupEventListeners(videoElement);
+        this.hlsManager.setupEventListeners(videoElement, callbacks);
+        this.eventManager.setupVideoElementEvents(videoElement);
     }
 
     setupNativePlayer(streamUrl, videoElement) {
         videoElement.src = streamUrl;
-        this.setupEventListeners(videoElement);
+        this.eventManager.setupVideoElementEvents(videoElement);
         this.attemptAutoplay(videoElement, 'Native player loaded');
     }
 
-    setupEventListeners(videoElement) {
-        if (this.hlsPlayer) {
-            this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-                this.attemptAutoplay(videoElement, 'HLS manifest loaded');
-            });
-            
-            this.hlsPlayer.on(Hls.Events.MANIFEST_LOADED, (event, data) => {
-                // Check if this is a "stream ended" playlist pattern
-                if (this.isStreamEndedPlaylist(data)) {
-                    console.log('Detected stream ended playlist pattern');
-                    this.handleNoSignal();
-                    return;
-                }
-            });
-            
-            this.hlsPlayer.on(Hls.Events.LEVEL_LOADED, (event, data) => {
-                // Also check when playlist updates are received
-                if (this.isStreamEndedPlaylist(data)) {
-                    console.log('Playlist updated to stream ended pattern');
-                    this.handleNoSignal();
-                    return;
-                }
-            });
-            
-            this.hlsPlayer.on(Hls.Events.FRAG_LOADED, () => {
-                if (!this.playbackStarted) {
-                    this.onPlaybackStarted(videoElement);
-                }
-            });
-            
-            this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
-                this.handleHlsError(data);
-            });
+    checkForStreamEnd(data) {
+        if (StreamAnalyzer.isStreamEndedPlaylist(data)) {
+            console.log('Detected stream ended playlist pattern');
+            this.handleNoSignal();
         }
-        
-        // Video element events
-        videoElement.addEventListener('canplay', () => {
-            if (!this.playbackStarted) {
-                this.onPlaybackStarted(videoElement);
-            }
-        });
-        
-        videoElement.addEventListener('playing', () => {
-            if (!this.playbackStarted) {
-                this.onPlaybackStarted(videoElement);
-            }
-            this.dismissAutoplayError();
-        });
-        
-        videoElement.addEventListener('play', () => {
-            this.dismissAutoplayError();
-        });
-        
-        videoElement.addEventListener('error', (e) => {
-            this.handleVideoError(e);
-        });
-        
-        ['stalled', 'waiting'].forEach(event => {
-            videoElement.addEventListener(event, () => {
-                this.bufferingManager.recordEvent(event);
-            });
-        });
+    }
+
+    onFirstFragmentLoaded(videoElement) {
+        if (!this.playbackStarted) {
+            this.onPlaybackStarted(videoElement);
+        }
     }
 
     onPlaybackStarted(videoElement) {
         console.log('Playback started successfully');
         this.playbackStarted = true;
         this.retryManager.reset();
-        this.clearLoadingTimeout();
-        this.clearNetworkMonitoring();
+        this.networkMonitor.cleanup();
         this.dismissAutoplayError();
         this.bufferingManager.startMonitoring(videoElement);
+    }
+
+    startMonitoring() {
+        this.networkMonitor.startLoadingTimeout((message) => {
+            this.errorHandler.showError('LOADING_TIMEOUT', message, true);
+        });
+        
+        this.networkMonitor.startNetworkMonitoring((message) => {
+            this.errorHandler.showError('NO_INTERNET', message);
+        });
     }
 
     handleHlsError(data) {
         const { type, details, fatal, frag } = data;
         
-        // Check for no signal
-        if (frag?.url?.includes('black.ts')) {
+        if (frag?.url && StreamAnalyzer.isBlackTsUrl(frag.url)) {
             this.handleNoSignal();
             return;
         }
@@ -272,40 +233,66 @@ export class VideoPlayer {
         }
         
         if (fatal) {
-            switch (type) {
-                case Hls.ErrorTypes.NETWORK_ERROR:
-                    this.handleNetworkError(details, data);
-                    break;
-                case Hls.ErrorTypes.MEDIA_ERROR:
-                    this.handleMediaError(details, data);
-                    break;
-                default:
-                    this.errorHandler.showError('HLS_FATAL', `Fatal HLS error: ${details}`);
-            }
+            this.handleFatalError(type, details, data);
+        }
+    }
+
+    handleFatalError(type, details, data) {
+        switch (type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+                this.handleNetworkError(details, data);
+                break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+                this.handleMediaError(details, data);
+                break;
+            default:
+                this.errorHandler.showError('HLS_FATAL', `Fatal HLS error: ${details}`);
         }
     }
 
     handleNetworkError(details, data) {
-        if (data.frag?.url?.includes('black.ts')) {
+        if (data.frag?.url && StreamAnalyzer.isBlackTsUrl(data.frag.url)) {
             this.handleNoSignal();
             return;
         }
         
+        const errorDetails = StreamAnalyzer.analyzeNetworkError(details, data);
+        
         if (!this.playbackStarted && this.retryManager.canRetry()) {
-            const delay = this.retryManager.getNextRetryDelay();
-            console.log(`Retrying stream (${this.retryManager.getCurrentAttempt()}/${this.retryManager.getMaxRetries()}) in ${delay}ms`);
-            setTimeout(() => this.retryStream(), delay);
+            this.scheduleRetry(errorDetails);
         } else if (!this.playbackStarted) {
-            this.errorHandler.showError('STREAM_FAILED_TO_START', 
-                `Unable to start stream after ${this.retryManager.getMaxRetries()} attempts. The stream may be offline or unreachable.`);
+            this.showStartupFailureError(errorDetails);
         } else {
-            const actions = [
-                { class: 'retry-btn', icon: '🔄', text: 'Reload Stream', onclick: 'window.app.videoPlayer.reloadStreamWithOverlay(this);' },
-                { class: 'continue-btn', icon: '▶️', text: 'Keep Trying', onclick: 'window.app.videoPlayer.errorHandler.dismissOverlay()' }
-            ];
-            this.errorHandler.showOverlayError('STREAM_INTERRUPTED', 
-                'Stream connection lost during playback. The stream may have ended or there\'s a network issue.', actions);
+            this.showPlaybackInterruptedError(errorDetails);
         }
+    }
+
+    scheduleRetry(errorDetails) {
+        const delay = this.retryManager.getNextRetryDelay();
+        console.log(`Retrying stream (${this.retryManager.getCurrentAttempt()}/${this.retryManager.getMaxRetries()}) in ${delay}ms`);
+        setTimeout(() => this.retryStream(), delay);
+    }
+
+    showStartupFailureError(errorDetails) {
+        const message = `Unable to start stream after ${this.retryManager.getMaxRetries()} attempts.\n\n` +
+            `**Error:** ${errorDetails.description}\n` +
+            `**Causes:** ${errorDetails.causes}\n` +
+            `**Solutions:** ${errorDetails.solutions}`;
+        this.errorHandler.showError('STREAM_FAILED_TO_START', message);
+    }
+
+    showPlaybackInterruptedError(errorDetails) {
+        const actions = [
+            { class: 'retry-btn', icon: '🔄', text: 'Reload Stream', onclick: 'window.app.videoPlayer.reloadStreamWithOverlay(this);' },
+            { class: 'continue-btn', icon: '▶️', text: 'Keep Trying', onclick: 'window.app.videoPlayer.errorHandler.dismissOverlay()' }
+        ];
+        
+        const message = `Stream connection lost during playback.\n\n` +
+            `**Error:** ${errorDetails.description}\n` +
+            `**Causes:** ${errorDetails.causes}\n` +
+            `**Solutions:** ${errorDetails.solutions}`;
+            
+        this.errorHandler.showOverlayError('STREAM_INTERRUPTED', message, actions);
     }
 
     handleMediaError(details, data) {
@@ -319,7 +306,7 @@ export class VideoPlayer {
             this.errorHandler.showError('MEDIA_ERROR', 'Media format error. This stream format may not be supported.');
         } else {
             try {
-                this.hlsPlayer.recoverMediaError();
+                this.hlsManager.recoverMediaError();
             } catch (e) {
                 this.errorHandler.showError('MEDIA_RECOVERY_FAILED', 'Playback error occurred and recovery failed.', true);
             }
@@ -345,103 +332,38 @@ export class VideoPlayer {
         );
         
         if (this.fragmentErrors.length >= this.maxFragmentErrors) {
-            const uniqueUrls = [...new Set(this.fragmentErrors.map(e => e.url))];
-            if (uniqueUrls.length === 1 && uniqueUrls[0].includes('black.ts')) {
-                this.handleNoSignal();
-            } else if (this.playbackStarted && this.bufferingManager.recoveryAttempts < this.bufferingManager.maxRecoveryAttempts) {
-                this.bufferingManager.attemptRecovery();
-                this.fragmentErrors = this.fragmentErrors.slice(-3);
-            } else {
-                const message = `Persistent connection issues. ${this.fragmentErrors.length} fragment errors in 30 seconds.`;
-                this.errorHandler.showError('STREAM_INTERRUPTED', message, true);
-            }
+            this.handleExcessiveFragmentErrors();
+        }
+    }
+
+    handleExcessiveFragmentErrors() {
+        const uniqueUrls = [...new Set(this.fragmentErrors.map(e => e.url))];
+        
+        if (uniqueUrls.length === 1 && StreamAnalyzer.isBlackTsUrl(uniqueUrls[0])) {
+            this.handleNoSignal();
+        } else if (this.playbackStarted && this.bufferingManager.recoveryAttempts < this.bufferingManager.maxRecoveryAttempts) {
+            this.bufferingManager.attemptRecovery();
+            this.fragmentErrors = this.fragmentErrors.slice(-3);
+        } else {
+            const message = `Persistent connection issues. ${this.fragmentErrors.length} fragment errors in 30 seconds.`;
+            this.errorHandler.showError('STREAM_INTERRUPTED', message, true);
         }
     }
 
     handleNoSignal() {
         if (this.streamEndDetected) return;
         
-        console.log('No signal detected (black.ts)');
+        console.log('No signal detected');
         this.streamEndDetected = true;
+        this.hlsManager.stopLoad();
+        this.networkMonitor.cleanup();
         
-        if (this.hlsPlayer) {
-            this.hlsPlayer.stopLoad();
-        }
-        
-        this.clearAllMonitoring();
         this.errorHandler.showError('NO_SIGNAL', 
             'The stream is currently showing no signal. This usually means:\n\n' +
             '• The broadcast has ended or is temporarily offline\n' +
             '• Technical difficulties at the source\n' +
             '• The channel is between programs\n\n' +
             'You can try reloading to check if the signal has returned.');
-    }
-
-    isStreamEndedPlaylist(manifestData) {
-        try {
-            // Check multiple possible data structures from HLS.js
-            const manifest = manifestData.details || manifestData.level || manifestData;
-            
-            // Look for the classic "stream ended" pattern:
-            // 1. Has EXT-X-ENDLIST (indicates stream has ended)
-            // 2. Contains only black.ts segments  
-            // 3. Usually has very few segments (often just 1)
-            
-            // Check if this is a non-live playlist (has ENDLIST)
-            if (manifest && (manifest.live === false || manifest.endlist === true)) {
-                const segments = manifest.segments || manifest.details?.segments || [];
-                
-                if (segments.length === 0) {
-                    return false; // Empty playlist, not necessarily ended
-                }
-                
-                // Check if all segments are black.ts (definitive stream ended pattern)
-                const blackSegments = segments.filter(segment => 
-                    segment && segment.url && segment.url.includes('black.ts')
-                );
-                
-                if (blackSegments.length === segments.length && segments.length > 0) {
-                    console.log(`Detected playlist with ${segments.length} black.ts segments and ENDLIST - stream has definitely ended`);
-                    return true;
-                }
-                
-                // Check for mixed playlist with majority black.ts segments (likely stream ended)
-                if (blackSegments.length > 0 && segments.length <= 5) {
-                    const blackRatio = blackSegments.length / segments.length;
-                    if (blackRatio >= 0.5) { // 50% or more are black.ts
-                        console.log(`Detected short playlist (${segments.length} segments) with ${blackSegments.length} black.ts segments and ENDLIST - likely stream ended`);
-                        return true;
-                    }
-                }
-                
-                // Special case: single segment playlist with black.ts
-                if (segments.length === 1 && blackSegments.length === 1) {
-                    console.log('Detected single black.ts segment with ENDLIST - stream ended');
-                    return true;
-                }
-            }
-            
-            // Also check the manifest URL itself
-            const manifestUrl = manifestData.url || this.currentStreamUrl || '';
-            if (manifestUrl.includes('black.ts')) {
-                console.log('Manifest URL contains black.ts - stream ended');
-                return true;
-            }
-            
-            // Check if the manifest content indicates stream end
-            if (manifestData.networkDetails && manifestData.networkDetails.responseText) {
-                const manifestText = manifestData.networkDetails.responseText;
-                if (manifestText.includes('#EXT-X-ENDLIST') && manifestText.includes('black.ts')) {
-                    console.log('Manifest content contains ENDLIST and black.ts - stream ended');
-                    return true;
-                }
-            }
-            
-        } catch (error) {
-            console.warn('Error analyzing manifest for stream end pattern:', error);
-        }
-        
-        return false;
     }
 
     attemptAutoplay(videoElement, context) {
@@ -455,11 +377,7 @@ export class VideoPlayer {
     handleAutoplayFailure(videoElement, error, context) {
         if (this.playbackStarted) return;
         
-        let reason = 'Browser autoplay policy prevents automatic playback';
-        if (error.name === 'AbortError') {
-            reason = 'Playback was interrupted (possibly by another stream starting)';
-        }
-        
+        const reason = StreamAnalyzer.getAutoplayFailureReason(error);
         this.showAutoplayDialog(reason, context);
     }
 
@@ -505,7 +423,6 @@ export class VideoPlayer {
             }
         }
         
-        // Auto-dismiss check
         setTimeout(() => {
             if (this.playbackStarted && this.autoplayErrorShown) {
                 this.dismissAutoplayError();
@@ -536,25 +453,7 @@ export class VideoPlayer {
         }
     }
 
-    // Backward compatibility methods
-    showError(errorType, message, showRetry = false) {
-        this.errorHandler.showError(errorType, message, showRetry);
-    }
-
-    hideError() {
-        this.errorHandler.hideError();
-    }
-
-    showLoading(message) {
-        // Legacy method - redirect to showLoadingState
-        this.showLoadingState();
-    }
-
-    closePlayer() {
-        // Legacy method - redirect to closeVideoPanel
-        this.closeVideoPanel();
-    }
-
+    // Stream control methods
     retryStream() {
         if (!this.currentStreamUrl || !this.isWatching) return;
         
@@ -635,49 +534,6 @@ export class VideoPlayer {
         }
     }
 
-    // Network monitoring methods
-    startLoadingTimeout() {
-        this.clearLoadingTimeout();
-        this.loadingTimeout = setTimeout(() => {
-            if (!this.playbackStarted && this.isWatching) {
-                const message = navigator.onLine === false ? 
-                    'No internet connection detected. Please check your network connection.' :
-                    'Stream is taking too long to load. This could be due to network issues or server problems.';
-                this.errorHandler.showError('LOADING_TIMEOUT', message, true);
-            }
-        }, this.maxLoadingTime);
-    }
-
-    clearLoadingTimeout() {
-        if (this.loadingTimeout) {
-            clearTimeout(this.loadingTimeout);
-            this.loadingTimeout = null;
-        }
-    }
-
-    startNetworkMonitoring() {
-        this.clearNetworkMonitoring();
-        this.networkCheckInterval = setInterval(() => {
-            if (!this.playbackStarted && typeof navigator.onLine !== 'undefined' && !navigator.onLine) {
-                this.errorHandler.showError('NO_INTERNET', 'Your device appears to be offline. Please check your internet connection.');
-                this.clearNetworkMonitoring();
-            }
-        }, 5000);
-    }
-
-    clearNetworkMonitoring() {
-        if (this.networkCheckInterval) {
-            clearInterval(this.networkCheckInterval);
-            this.networkCheckInterval = null;
-        }
-    }
-
-    clearAllMonitoring() {
-        this.bufferingManager.clearMonitoring();
-        this.clearLoadingTimeout();
-        this.clearNetworkMonitoring();
-    }
-
     // Cleanup methods
     closeVideoPanel() {
         this.forceCleanup();
@@ -688,8 +544,7 @@ export class VideoPlayer {
         if (mainContainer) mainContainer.classList.remove('watching');
         if (videoPanel) videoPanel.style.display = 'none';
         
-        // Notify mobile navigation that video was closed
-        if (window.app && window.app.mobileNav) {
+        if (window.app?.mobileNav) {
             window.app.mobileNav.onVideoClosed();
         }
         
@@ -711,6 +566,23 @@ export class VideoPlayer {
         this.retryManager.reset();
         this.bufferingManager.reset();
         this.isWatching = false;
+    }
+
+    // Backward compatibility methods
+    showError(errorType, message, showRetry = false) {
+        this.errorHandler.showError(errorType, message, showRetry);
+    }
+
+    hideError() {
+        this.errorHandler.hideError();
+    }
+
+    showLoading(message) {
+        this.showLoadingState();
+    }
+
+    closePlayer() {
+        this.closeVideoPanel();
     }
 
     // Fullscreen handling
