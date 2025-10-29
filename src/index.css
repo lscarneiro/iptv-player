@@ -162,28 +162,27 @@ body {
 
 .checkbox-label {
     display: flex !important;
-    align-items: flex-start;
-    gap: 0.75rem;
+    align-items: center;
+    gap: 0.5rem;
     cursor: pointer;
     user-select: none;
-    margin-bottom: 0 !important;
+    margin-bottom: 0.5rem !important;
 }
 
 .checkbox-label input[type="checkbox"] {
     width: 18px !important;
     height: 18px;
-    margin-top: 2px;
     cursor: pointer;
     accent-color: #007acc;
     flex-shrink: 0;
 }
 
 .checkbox-label span {
-    flex: 1;
     line-height: 1.4;
+    white-space: nowrap;
 }
 
-.checkbox-label small {
+.form-group small {
     display: block;
     color: #aaa;
     font-size: 0.85rem;
