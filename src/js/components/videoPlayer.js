@@ -110,6 +110,12 @@ export class VideoPlayer {
         // Clear any previous errors
         this.hideError();
         
+        // Ensure video container is visible
+        const videoContainer = document.querySelector('.video-container-large');
+        if (videoContainer) {
+            videoContainer.style.display = 'flex';
+        }
+        
         // Check for black.ts streams (no signal)
         if (streamUrl && streamUrl.includes('black.ts')) {
             this.handleNoSignal();
@@ -156,11 +162,34 @@ export class VideoPlayer {
             fragLoadingTimeOut: 20000,
             manifestLoadingTimeOut: 10000,
             fragLoadingMaxRetry: 2,
-            manifestLoadingMaxRetry: 1
+            manifestLoadingMaxRetry: 1,
+            // Additional settings for better compatibility
+            debug: false,
+            capLevelToPlayerSize: false,
+            startLevel: -1,
+            autoStartLoad: true,
+            defaultAudioCodec: undefined,
+            initialLiveManifestSize: 1,
+            maxBufferSize: 60 * 1000 * 1000,
+            maxBufferHole: 0.5
         });
         
         this.hlsPlayer.loadSource(streamUrl);
         this.hlsPlayer.attachMedia(videoElement);
+        
+        // Ensure video element is properly configured
+        videoElement.muted = false;
+        videoElement.controls = true;
+        videoElement.preload = 'metadata';
+        
+        console.log('HLS player attached to video element:', videoElement.id);
+        console.log('Video element visibility:', {
+            display: getComputedStyle(videoElement).display,
+            visibility: getComputedStyle(videoElement).visibility,
+            opacity: getComputedStyle(videoElement).opacity,
+            width: videoElement.offsetWidth,
+            height: videoElement.offsetHeight
+        });
         
         // Set up event listeners
         this.setupHlsEventListeners(videoElement);
@@ -175,8 +204,9 @@ export class VideoPlayer {
     }
 
     setupHlsEventListeners(videoElement) {
-        this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+        this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
             console.log('HLS manifest parsed successfully');
+            console.log('Available levels:', data.levels?.map(l => `${l.width}x${l.height}@${l.bitrate}`));
             this.attemptAutoplay(videoElement, 'HLS manifest loaded');
         });
         
@@ -203,6 +233,14 @@ export class VideoPlayer {
             console.log('Video load started');
         });
         
+        videoElement.addEventListener('loadedmetadata', () => {
+            console.log('Video metadata loaded - dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+        });
+        
+        videoElement.addEventListener('loadeddata', () => {
+            console.log('Video data loaded');
+        });
+        
         videoElement.addEventListener('canplay', () => {
             if (!this.playbackStarted) {
                 this.playbackStarted = true;
@@ -217,6 +255,10 @@ export class VideoPlayer {
         
         videoElement.addEventListener('playing', () => {
             console.log('Video is now playing');
+            console.log('Video tracks:', videoElement.videoTracks?.length || 'N/A');
+            console.log('Audio tracks:', videoElement.audioTracks?.length || 'N/A');
+            console.log('Video dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+            
             if (!this.playbackStarted) {
                 this.playbackStarted = true;
                 this.retryManager.reset();
@@ -765,7 +807,7 @@ export class VideoPlayer {
         console.log('Force cleaning up current stream state');
         this.cleanup();
         
-        // Aggressively reset video element to prevent autoplay race conditions
+        // Reset video element more carefully to prevent issues
         const videoLarge = document.getElementById('videoPlayerLarge');
         if (videoLarge) {
             videoLarge.pause();
@@ -773,9 +815,15 @@ export class VideoPlayer {
             videoLarge.removeAttribute('src');
             videoLarge.load();
             
-            // Clone element to remove all event listeners
-            const newVideo = videoLarge.cloneNode(true);
-            videoLarge.parentNode.replaceChild(newVideo, videoLarge);
+            // Remove event listeners without cloning (which can break video display)
+            // Instead, just ensure we have a clean state
+            videoLarge.muted = false;
+            videoLarge.controls = true;
+            videoLarge.preload = 'metadata';
+            
+            // Clear any inline styles that might interfere
+            videoLarge.style.display = '';
+            videoLarge.style.visibility = '';
         }
     }
 
