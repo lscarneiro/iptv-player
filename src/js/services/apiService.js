@@ -27,45 +27,36 @@ export class ApiService {
         return url.toString();
     }
 
-    async fetchApi(url, signal = null) {
+    async fetchApi(url) {
         try {
-            const options = {};
-            if (signal) {
-                options.signal = signal;
-            }
-            
-            const response = await fetch(url, options);
+            const response = await fetch(url);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             return await response.json();
         } catch (error) {
-            if (error.name === 'AbortError') {
-                console.log('Request was cancelled');
-                throw new Error('Request cancelled');
-            }
             console.error('API fetch error:', error);
             throw error;
         }
     }
 
-    async getUserInfo(signal = null) {
+    async getUserInfo() {
         const url = this.buildApiUrl();
-        return await this.fetchApi(url, signal);
+        return await this.fetchApi(url);
     }
 
-    async getLiveCategories(signal = null) {
+    async getLiveCategories() {
         const url = this.buildApiUrl('get_live_categories');
-        return await this.fetchApi(url, signal);
+        return await this.fetchApi(url);
     }
 
-    async getLiveStreams(categoryId = null, signal = null) {
+    async getLiveStreams(categoryId = null) {
         const params = categoryId ? { category_id: categoryId } : {};
         const url = this.buildApiUrl('get_live_streams', params);
-        return await this.fetchApi(url, signal);
+        return await this.fetchApi(url);
     }
 
-    async getStreamPlaylist(streamId, signal = null) {
+    async getStreamPlaylist(streamId) {
         // Try different endpoints that might return the stream URL
         const endpoints = [
             { action: 'get_simple_data_table', params: { stream_id: streamId } },
@@ -76,7 +67,7 @@ export class ApiService {
         for (const endpoint of endpoints) {
             try {
                 const url = this.buildApiUrl(endpoint.action, endpoint.params);
-                const result = await this.fetchApi(url, signal);
+                const result = await this.fetchApi(url);
                 console.log(`Tried ${endpoint.action}:`, result);
                 
                 // Check if this looks like a stream URL response
@@ -90,9 +81,6 @@ export class ApiService {
                     }
                 }
             } catch (error) {
-                if (error.message === 'Request cancelled') {
-                    throw error;
-                }
                 console.log(`Endpoint ${endpoint.action} failed:`, error.message);
                 continue;
             }
