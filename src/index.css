@@ -436,6 +436,20 @@ body {
     filter: grayscale(1);
 }
 
+/* No signal specific styling */
+.error-container.no-signal {
+    background: linear-gradient(135deg, #616161, #424242);
+    border-color: #9E9E9E;
+}
+
+.error-container.no-signal .error-title {
+    color: #FFE082;
+}
+
+.error-container.no-signal .error-message {
+    text-align: left;
+}
+
 /* Autoplay blocked specific styling */
 .error-container.autoplay-blocked {
     background: linear-gradient(135deg, #4CAF50, #2E7D32);
