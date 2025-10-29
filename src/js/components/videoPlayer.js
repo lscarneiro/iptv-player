@@ -22,6 +22,7 @@ export class VideoPlayer {
         this.loadingTimeout = null;
         this.maxLoadingTime = 30000;
         this.networkCheckInterval = null;
+        this.m3u8LoggingEnabled = false;
         
         // Setup fullscreen handlers only once
         if (!VideoPlayer.handlersInitialized) {
@@ -34,6 +35,29 @@ export class VideoPlayer {
             } else {
                 this.initializeFullscreenHandlers();
             }
+        }
+    }
+
+    setM3u8LoggingEnabled(enabled) {
+        this.m3u8LoggingEnabled = enabled;
+        console.log(`M3U8 tag logging ${enabled ? 'enabled' : 'disabled'}`);
+    }
+
+    logM3u8Tags(content, type = 'manifest') {
+        if (!this.m3u8LoggingEnabled) return;
+        
+        const lines = content.split('\n');
+        const tags = lines.filter(line => line.trim().startsWith('#'));
+        
+        if (tags.length > 0) {
+            console.group(`🔍 M3U8 ${type.toUpperCase()} Tags (${tags.length} found)`);
+            tags.forEach((tag, index) => {
+                const trimmedTag = tag.trim();
+                if (trimmedTag) {
+                    console.log(`${index + 1}. ${trimmedTag}`);
+                }
+            });
+            console.groupEnd();
         }
     }
 
@@ -152,7 +176,7 @@ export class VideoPlayer {
     }
 
     setupHlsPlayer(streamUrl, videoElement) {
-        this.hlsPlayer = new Hls({
+        const hlsConfig = {
             enableWorker: true,
             lowLatencyMode: true,
             backBufferLength: 90,
@@ -172,7 +196,42 @@ export class VideoPlayer {
             initialLiveManifestSize: 1,
             maxBufferSize: 60 * 1000 * 1000,
             maxBufferHole: 0.5
-        });
+        };
+
+        // Add custom loader to intercept M3U8 content if logging is enabled
+        if (this.m3u8LoggingEnabled) {
+            hlsConfig.loader = class extends Hls.DefaultConfig.loader {
+                load(context, config, callbacks) {
+                    const originalOnSuccess = callbacks.onSuccess;
+                    callbacks.onSuccess = (response, stats, context) => {
+                        // Log M3U8 content if it's a manifest
+                        if (context.type === 'manifest' || context.url.includes('.m3u8')) {
+                            const content = response.data || response;
+                            if (typeof content === 'string' && content.includes('#EXTM3U')) {
+                                console.group(`📄 Raw M3U8 Content from ${context.url}`);
+                                console.log('Full content:');
+                                console.log(content);
+                                
+                                // Extract and highlight tags
+                                const lines = content.split('\n');
+                                const tags = lines.filter(line => line.trim().startsWith('#'));
+                                if (tags.length > 0) {
+                                    console.log('\n🏷️ Extracted tags:');
+                                    tags.forEach((tag, index) => {
+                                        console.log(`${index + 1}. ${tag.trim()}`);
+                                    });
+                                }
+                                console.groupEnd();
+                            }
+                        }
+                        originalOnSuccess(response, stats, context);
+                    };
+                    super.load(context, config, callbacks);
+                }
+            };
+        }
+
+        this.hlsPlayer = new Hls(hlsConfig);
         
         this.hlsPlayer.loadSource(streamUrl);
         this.hlsPlayer.attachMedia(videoElement);
@@ -209,8 +268,66 @@ export class VideoPlayer {
             console.log('Available levels:', data.levels?.map(l => `${l.width}x${l.height}@${l.bitrate}`));
             this.attemptAutoplay(videoElement, 'HLS manifest loaded');
         });
+
+        // Log main manifest content
+        this.hlsPlayer.on(Hls.Events.MANIFEST_LOADED, (event, data) => {
+            if (this.m3u8LoggingEnabled && data.details && data.details.url) {
+                console.log('📄 Main M3U8 manifest loaded from:', data.details.url);
+                if (data.details.totalduration) {
+                    console.log('📊 Total duration:', data.details.totalduration);
+                }
+            }
+        });
+
+        // Log level playlist content (variant streams)
+        this.hlsPlayer.on(Hls.Events.LEVEL_LOADED, (event, data) => {
+            if (this.m3u8LoggingEnabled && data.details) {
+                console.group('📺 Level playlist loaded');
+                console.log('Level:', data.level);
+                console.log('URL:', data.details.url);
+                console.log('Type:', data.details.type);
+                console.log('Live:', data.details.live);
+                if (data.details.fragments && data.details.fragments.length > 0) {
+                    console.log('Fragments:', data.details.fragments.length);
+                    console.log('Target duration:', data.details.targetduration);
+                    
+                    // Log any special fragments (like ad markers)
+                    const specialFragments = data.details.fragments.filter(frag => 
+                        frag.tagList && frag.tagList.length > 0
+                    );
+                    if (specialFragments.length > 0) {
+                        console.log('Fragments with tags:', specialFragments.length);
+                        specialFragments.forEach((frag, index) => {
+                            console.log(`Fragment ${index + 1} tags:`, frag.tagList);
+                        });
+                    }
+                }
+                console.groupEnd();
+            }
+        });
+
+        // Log audio track changes (could indicate ad-breaks)
+        this.hlsPlayer.on(Hls.Events.AUDIO_TRACK_SWITCHED, (event, data) => {
+            if (this.m3u8LoggingEnabled) {
+                console.log('🔊 Audio track switched:', data);
+            }
+        });
+
+        // Log subtitle track changes
+        this.hlsPlayer.on(Hls.Events.SUBTITLE_TRACK_SWITCH, (event, data) => {
+            if (this.m3u8LoggingEnabled) {
+                console.log('📝 Subtitle track switched:', data);
+            }
+        });
+
+        // Log level switches (quality changes that might happen during ads)
+        this.hlsPlayer.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+            if (this.m3u8LoggingEnabled) {
+                console.log('📊 Quality level switched to:', data.level);
+            }
+        });
         
-        this.hlsPlayer.on(Hls.Events.FRAG_LOADED, () => {
+        this.hlsPlayer.on(Hls.Events.FRAG_LOADED, (event, data) => {
             if (!this.playbackStarted) {
                 this.playbackStarted = true;
                 this.retryManager.reset(); // Reset retry count on successful start
@@ -219,6 +336,42 @@ export class VideoPlayer {
                 this.clearNetworkMonitoring();
                 this.dismissAutoplayError();
                 this.startBufferingMonitor(videoElement);
+            }
+
+            // Log fragment details for debugging ad-breaks
+            if (this.m3u8LoggingEnabled && data.frag) {
+                const frag = data.frag;
+                
+                // Log all fragments with any special properties
+                const hasSpecialProps = frag.tagList?.length > 0 || 
+                                       frag.programDateTime || 
+                                       frag.discontinuity ||
+                                       frag.gap ||
+                                       frag.byteRange;
+                
+                if (hasSpecialProps) {
+                    console.group(`🎬 Fragment ${frag.sn} loaded with special properties`);
+                    console.log('URL:', frag.url);
+                    console.log('Duration:', frag.duration);
+                    
+                    if (frag.tagList?.length > 0) {
+                        console.log('📋 Tags:', frag.tagList);
+                    }
+                    if (frag.programDateTime) {
+                        console.log('🕐 Program Date Time:', frag.programDateTime);
+                    }
+                    if (frag.discontinuity) {
+                        console.log('⚠️ Discontinuity detected (possible ad-break)');
+                    }
+                    if (frag.gap) {
+                        console.log('🕳️ Gap fragment detected');
+                    }
+                    if (frag.byteRange) {
+                        console.log('📏 Byte range:', frag.byteRange);
+                    }
+                    
+                    console.groupEnd();
+                }
             }
         });
         

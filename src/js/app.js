@@ -56,6 +56,10 @@ export class IPTVApp {
         this.settingsPanel.setOnSubmit((serverUrl, username, password) => {
             this.handleLogin(serverUrl, username, password);
         });
+
+        this.settingsPanel.setOnM3u8LoggingChange((enabled) => {
+            this.handleM3u8LoggingChange(enabled);
+        });
     }
 
     setupEventListeners() {
@@ -155,6 +159,11 @@ export class IPTVApp {
                 this.loadStreams(false);
             }
         });
+
+        // M3U8 logging checkbox
+        const savedM3u8Logging = this.storageService.loadM3u8Logging();
+        this.videoPlayer.setM3u8LoggingEnabled(savedM3u8Logging);
+        this.settingsPanel.setM3u8LoggingState(savedM3u8Logging);
     }
 
     // Authentication
@@ -208,6 +217,12 @@ export class IPTVApp {
             alert(`Login failed: ${error.message}`);
             this.storageService.clearCredentials();
         }
+    }
+
+    handleM3u8LoggingChange(enabled) {
+        this.videoPlayer.setM3u8LoggingEnabled(enabled);
+        this.storageService.saveM3u8Logging(enabled);
+        console.log(`M3U8 logging ${enabled ? 'enabled' : 'disabled'} - changes will apply to new streams`);
     }
 
     checkSavedCredentials() {
