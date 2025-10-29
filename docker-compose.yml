@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  iptv-player:
+    build: .
+    ports:
+      - "8080:80"  # Map container port 80 to host port 8080
+    container_name: iptv-player
+    restart: unless-stopped
+

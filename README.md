@@ -1,6 +1,6 @@
-# IPTV Player - Refactored Architecture
+# IPTV Player
 
-This directory contains the refactored IPTV Player application with a modular architecture following separation of concerns and best practices.
+IPTV Player is a web application for streaming and watching IPTV channels. It features a modular architecture following separation of concerns and best practices.
 
 ## Directory Structure
 
@@ -12,16 +12,23 @@ src/
 │   │   ├── apiService.js         # API communication service
 │   │   └── storageService.js     # IndexedDB and localStorage management
 │   ├── components/
-│   │   ├── categoryList.js        # Category list UI component
+│   │   ├── categoryList.js       # Category list UI component
 │   │   ├── streamList.js         # Stream list UI component
-│   │   ├── videoPlayer.js         # Video player component
+│   │   ├── videoPlayer.js        # Video player component
 │   │   ├── userInfo.js           # User information display component
-│   │   └── settingsPanel.js      # Settings panel component
+│   │   ├── settingsPanel.js      # Settings panel component
+│   │   ├── errorHandler.js       # Error handling and UI management
+│   │   ├── retryManager.js       # Retry logic with exponential backoff
+│   │   └── bufferingManager.js   # Buffering detection and recovery
 │   └── utils/
 │       ├── debounce.js           # Debounce utility
-│       └── domHelpers.js          # DOM manipulation utilities
+│       ├── domHelpers.js         # DOM manipulation utilities
+│       └── mobileNavigation.js   # Mobile navigation and view management
 ├── index.html                     # Main HTML file
-└── index.css                      # Styles
+├── index.css                      # Styles
+├── manifest.json                  # PWA manifest
+├── service-worker.js              # Service worker for offline support
+└── favicon files                  # App icons
 ```
 
 ## Architecture Overview
@@ -54,6 +61,8 @@ src/
   - Video panel management
   - Error handling and fallback links
   - M3U8 tag logging for debugging ad-breaks and stream issues
+  - Retry logic integration
+  - Buffering detection and recovery
   
 - **userInfo.js**: Displays user account information
   - Account details
@@ -64,10 +73,31 @@ src/
   - Settings panel toggle
   - Login form handling
   - Credentials management
+  
+- **errorHandler.js**: Centralized error handling
+  - Error state management
+  - UI error display
+  - User-friendly error messages
+  - Retry button integration
+  
+- **retryManager.js**: Retry logic with exponential backoff
+  - Configurable max retries
+  - Exponential backoff strategy
+  - Retry count tracking
+  
+- **bufferingManager.js**: Buffering detection and recovery
+  - Detects buffering events
+  - Automatic recovery attempts
+  - Tracks buffering patterns
 
 ### Utilities
 - **debounce.js**: Utility for debouncing function calls
 - **domHelpers.js**: DOM manipulation utilities (escapeHtml, toggleClearButton, etc.)
+- **mobileNavigation.js**: Mobile navigation and view management
+  - View switching (categories, streams, video)
+  - Mobile-optimized navigation
+  - Back button handling
+  - Responsive UI state management
 
 ### Main Application (app.js)
 The main `IPTVApp` class:
@@ -134,11 +164,18 @@ This feature is particularly useful for:
 
 **Note**: This feature can generate verbose console output. Disable it when not needed for debugging.
 
-## Migration Notes
+## Progressive Web App (PWA)
 
-The original monolithic `index.js` (1202 lines) has been split into 11 focused modules. The functionality remains identical, but the code is now:
-- More organized
-- Easier to understand
-- Better structured for future enhancements
-- Following modern JavaScript best practices
+The application is configured as a Progressive Web App:
+- Can be installed on devices
+- Offline support via service worker
+- Standalone app experience
+- See `PWA_SETUP.md` for detailed setup instructions
+
+## Docker Deployment
+
+The application can be deployed using Docker:
+- Minimal Dockerfile using nginx:alpine
+- Docker Compose configuration included
+- See `DOCKER_README.md` for setup instructions
 

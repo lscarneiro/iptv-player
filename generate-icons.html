@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Generate Favicon PNGs</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        canvas {
+            margin: 20px 0;
+            border: 1px solid #ddd;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        .instructions {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Generate PNG Favicons</h1>
+    <div class="instructions">
+        <p>Click the buttons below to generate and download PNG favicon files.</p>
+    </div>
+    
+    <canvas id="iconCanvas"></canvas>
+    
+    <div>
+        <button onclick="generateIcon(192)">Generate 192x192</button>
+        <button onclick="generateIcon(512)">Generate 512x512</button>
+    </div>
+    
+    <script>
+        const canvas = document.getElementById('iconCanvas');
+        
+        function generateIcon(size) {
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, size, size);
+            
+            // Scale factor
+            const scale = size / 100;
+            ctx.scale(scale, scale);
+            
+            // Background (transparent)
+            ctx.fillStyle = 'transparent';
+            ctx.fillRect(0, 0, size, size);
+            
+            // Create gradients
+            const screenGrad = ctx.createLinearGradient(0, 0, 100, 100);
+            screenGrad.addColorStop(0, '#00a8ff');
+            screenGrad.addColorStop(1, '#0077c7');
+            
+            const standGrad = ctx.createLinearGradient(0, 0, 0, 100);
+            standGrad.addColorStop(0, '#4a4a4a');
+            standGrad.addColorStop(1, '#2a2a2a');
+            
+            // TV Screen Frame
+            ctx.fillStyle = '#1a1a1a';
+            ctx.beginPath();
+            ctx.roundRect(10, 10, 80, 55, 5);
+            ctx.fill();
+            
+            ctx.strokeStyle = '#404040';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(10, 10, 80, 55, 5);
+            ctx.stroke();
+            
+            // Screen Content
+            ctx.fillStyle = screenGrad;
+            ctx.beginPath();
+            ctx.roundRect(15, 15, 70, 45, 2);
+            ctx.fill();
+            
+            // Screen Grid Lines
+            ctx.strokeStyle = '#00d4ff';
+            ctx.lineWidth = 0.5;
+            ctx.globalAlpha = 0.4;
+            ctx.beginPath();
+            ctx.moveTo(20, 30);
+            ctx.lineTo(80, 30);
+            ctx.moveTo(20, 40);
+            ctx.lineTo(80, 40);
+            ctx.moveTo(20, 50);
+            ctx.lineTo(80, 50);
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+            
+            // TV Frame Bottom
+            ctx.fillStyle = '#2d2d2d';
+            ctx.beginPath();
+            ctx.roundRect(25, 60, 50, 4, 2);
+            ctx.fill();
+            
+            // TV Stand
+            ctx.fillStyle = standGrad;
+            ctx.beginPath();
+            ctx.roundRect(40, 64, 20, 5, 2);
+            ctx.fill();
+            ctx.fillStyle = '#2a2a2a';
+            ctx.beginPath();
+            ctx.roundRect(35, 69, 30, 4, 2);
+            ctx.fill();
+            
+            // Speaker Dots (left)
+            ctx.fillStyle = '#ffffff';
+            ctx.globalAlpha = 0.6;
+            ctx.beginPath();
+            ctx.arc(20, 35, 1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(20, 40, 1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(20, 45, 1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(20, 50, 1, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Speaker Dots (right)
+            ctx.beginPath();
+            ctx.arc(80, 35, 1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(80, 40, 1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(80, 45, 1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(80, 50, 1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+            
+            // Download
+            canvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `favicon-${size}x${size}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+        }
+    </script>
+    
+    <script>
+        // Add roundRect polyfill for older browsers
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function(x, y, width, height, radius) {
+                this.beginPath();
+                this.moveTo(x + radius, y);
+                this.lineTo(x + width - radius, y);
+                this.quadraticCurveTo(x + width, y, x + width, y + radius);
+                this.lineTo(x + width, y + height - radius);
+                this.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+                this.lineTo(x + radius, y + height);
+                this.quadraticCurveTo(x, y + height, x, y + height - radius);
+                this.lineTo(x, y + radius);
+                this.quadraticCurveTo(x, y, x + radius, y);
+                this.closePath();
+                return this;
+            };
+        }
+    </script>
+</body>
+</html>
