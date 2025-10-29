@@ -25,6 +25,7 @@ export class IPTVApp {
         // Request tracking for preventing race conditions
         this.currentCategoryLoadId = 0;
         this.currentStreamLoadId = 0;
+        this.currentFilterId = 0;
         
         this.init();
     }
@@ -125,10 +126,8 @@ export class IPTVApp {
             searchBox.value = '';
             toggleClearButton('clearStreamSearch', '');
             
-            // Reload streams from cache
-            if (this.currentCategory) {
-                this.loadStreams(false);
-            }
+            // Use streamList's filter method to clear search
+            this.streamList.filter('');
             
             searchBox.focus();
         });
@@ -158,10 +157,7 @@ export class IPTVApp {
             this.streamList.setFilterMarkers(filterValue);
             this.storageService.saveFilterMarkers(filterValue);
             
-            // Re-render current streams with new filter
-            if (this.currentCategory) {
-                this.loadStreams(false);
-            }
+            // The streamList.setFilterMarkers method now handles re-filtering automatically
         });
 
         // M3U8 logging checkbox
@@ -325,6 +321,13 @@ export class IPTVApp {
     async handleCategorySelect(categoryId) {
         this.currentCategory = categoryId;
         
+        // Clear any existing search when switching categories
+        const searchBox = document.getElementById('streamSearch');
+        if (searchBox) {
+            searchBox.value = '';
+            toggleClearButton('clearStreamSearch', '');
+        }
+        
         // Scroll to top of streams container on category change (especially important for mobile)
         setTimeout(() => {
             const streamsContainer = document.getElementById('streamsContainer');
@@ -347,12 +350,6 @@ export class IPTVApp {
         
         // Load streams for the new category
         await this.loadStreams();
-        
-        // Apply any existing search term to the new category
-        const searchBox = document.getElementById('streamSearch');
-        if (searchBox && searchBox.value.trim()) {
-            await this.filterStreams(searchBox.value);
-        }
         
         // Notify mobile navigation
         this.mobileNav.onCategorySelected();
@@ -468,45 +465,14 @@ export class IPTVApp {
     }
 
     async filterStreams(searchTerm) {
-        const term = searchTerm.trim().toLowerCase();
+        // Generate unique filter request ID to prevent race conditions
+        const filterId = ++this.currentFilterId;
         
-        // If no search term, reload original streams from cache
-        if (!term) {
-            // Reload from cache to ensure we show the full category, not previously filtered results
-            await this.loadStreams(false);
-            return;
-        }
+        // Use the streamList's built-in filter method which handles everything properly
+        this.streamList.filter(searchTerm);
         
-        // Always fetch fresh streams from cache for search
-        try {
-            const cacheKey = this.currentCategory === 'all' ? 'all_streams' : `category_${this.currentCategory}`;
-            let streams = await this.storageService.getFromIndexedDB('streams', cacheKey);
-            
-            // If not in cache, need to load them first
-            if (!streams) {
-                await this.loadStreams(false);
-                streams = this.streamList.getFilteredStreams();
-            }
-            
-            // Filter by search term only
-            const filtered = streams.filter(stream => {
-                const name = stream.name ? stream.name.toLowerCase() : '';
-                return name.includes(term);
-            });
-            
-            // Show all filtered results with lazy loading (start with 50)
-            this.streamList.visibleStreams = 50;
-            // Store filtered streams so render can apply marker filter
-            // render will call: this.allStreams = filteredStreams where filteredStreams = filtered (after marker filter)
-            this.streamList.render(filtered, this.currentCategoryName);
-        } catch (error) {
-            if (error.message === 'Request cancelled') {
-                return; // Don't show error for cancelled requests
-            }
-            console.error('Error filtering streams:', error);
-            // Fallback: reload streams
-            await this.loadStreams(false);
-        }
+        // No need to do anything else - the streamList handles all the filtering logic
+        // including marker filtering, search term filtering, and proper state management
     }
 
     // Video Player
