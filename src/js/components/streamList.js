@@ -5,13 +5,17 @@ import { escapeHtml } from '../utils/domHelpers.js';
 export class StreamList {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
-        this.allStreams = [];
-        this.visibleStreams = 50;
+        this.allStreams = []; // Original unfiltered streams
+        this.filteredStreams = []; // Currently filtered streams
+        this.visibleStreams = 30;
         this.currentPlayingStreamId = null;
         this.filterMarkers = true;
         this.currentCategoryName = 'All Channels';
         this.isLoading = false;
         this.infiniteScrollEnabled = true;
+        this.currentSearchTerm = ''; // Track current search
+        this.renderRequestId = 0; // Prevent race conditions
+        this.isDestroyed = false; // Track component lifecycle
         
         this.setupInfiniteScroll();
     }
@@ -45,19 +49,27 @@ export class StreamList {
     }
 
     loadMoreAutomatically() {
-        const filteredStreams = this.getFilteredStreams();
-        const hasMore = filteredStreams.length > this.visibleStreams;
+        // Safety checks
+        if (this.isDestroyed || this.isLoading || !this.infiniteScrollEnabled) {
+            return;
+        }
         
-        if (hasMore && !this.isLoading) {
+        // Use the current filtered streams, not recalculated ones
+        const hasMore = this.filteredStreams.length > this.visibleStreams;
+        
+        if (hasMore) {
             this.isLoading = true;
-            this.visibleStreams += 50;
+            const previousVisible = this.visibleStreams;
+            this.visibleStreams += 30;
             
-            // Re-render with updated visibleStreams
-            this.render(filteredStreams, this.currentCategoryName);
+            // Only re-render the additional items to prevent full re-render
+            this.renderAdditionalItems(previousVisible);
             
             // Reset loading state after a short delay
             setTimeout(() => {
-                this.isLoading = false;
+                if (!this.isDestroyed) {
+                    this.isLoading = false;
+                }
             }, 100);
         }
     }
@@ -67,16 +79,39 @@ export class StreamList {
         this.infiniteScrollEnabled = enabled;
     }
 
+    // Check if operations should continue (not destroyed, request still valid)
+    shouldContinueOperation(requestId = null) {
+        if (this.isDestroyed) return false;
+        if (requestId !== null && requestId !== this.renderRequestId) return false;
+        return true;
+    }
+
+    // Reset search state (useful when changing categories)
+    resetSearch() {
+        this.currentSearchTerm = '';
+        this.visibleStreams = 30;
+        this.isLoading = false;
+    }
+
+    // Cleanup method
+    destroy() {
+        this.isDestroyed = true;
+        this.isLoading = false;
+    }
+
     setOnWatchStream(callback) {
         this.onWatchStream = callback;
     }
 
     setFilterMarkers(value) {
         this.filterMarkers = value;
+        // Re-apply current filter with new marker setting
+        this.filter(this.currentSearchTerm);
     }
 
     getFilteredStreams() {
-        return this.allStreams.filter(stream => {
+        // Apply marker filter to current filtered streams
+        return this.filteredStreams.filter(stream => {
             if (!this.filterMarkers) return true;
             const name = stream.name || '';
             return !name.trim().startsWith('###');
@@ -84,17 +119,27 @@ export class StreamList {
     }
 
     render(streams, categoryName) {
+        // Generate unique request ID to prevent race conditions
+        const requestId = ++this.renderRequestId;
+        
         this.currentCategoryName = categoryName;
         
-        // Apply marker filter
-        const filteredStreams = this.filterMarkers
+        // Store original streams and apply marker filter
+        this.allStreams = streams || [];
+        this.filteredStreams = this.filterMarkers
             ? streams.filter(stream => {
                 const name = stream.name || '';
                 return !name.trim().startsWith('###');
             })
             : streams;
 
-        this.allStreams = filteredStreams;
+        // Apply search filter if there's an active search
+        if (this.currentSearchTerm) {
+            this.filteredStreams = this.filteredStreams.filter(stream => {
+                const name = stream.name ? stream.name.toLowerCase() : '';
+                return name.includes(this.currentSearchTerm.toLowerCase());
+            });
+        }
         
         // Reset scroll position to top when rendering new streams (important for mobile)
         if (this.container) {
@@ -104,15 +149,24 @@ export class StreamList {
             });
         }
         
+        // Check if this render is still valid
+        if (!this.shouldContinueOperation(requestId)) {
+            console.log('Render request outdated or component destroyed, skipping');
+            return;
+        }
+        
         // Update panel header with category name and count
         const panelTitle = document.querySelector('.right-panel .panel-title');
         if (panelTitle) {
-            panelTitle.textContent = `Streams - ${categoryName} (${filteredStreams.length})`;
+            const displayText = this.currentSearchTerm 
+                ? `Streams - ${categoryName} (${this.filteredStreams.length} filtered)`
+                : `Streams - ${categoryName} (${this.filteredStreams.length})`;
+            panelTitle.textContent = displayText;
         }
         
         // Lazy load: only show first visibleStreams items
-        const visibleItems = filteredStreams.slice(0, this.visibleStreams);
-        const hasMore = filteredStreams.length > this.visibleStreams;
+        const visibleItems = this.filteredStreams.slice(0, this.visibleStreams);
+        const hasMore = this.filteredStreams.length > this.visibleStreams;
         
         let html = '';
         visibleItems.forEach(stream => {
@@ -170,6 +224,159 @@ export class StreamList {
         // Infinite scroll handles loading automatically - no manual button needed
     }
 
+    renderAdditionalItems(startIndex) {
+        // Safety check
+        if (this.isDestroyed || !this.container) return;
+        
+        // Render additional items for infinite scroll without full re-render
+        const endIndex = Math.min(this.visibleStreams, this.filteredStreams.length);
+        const additionalItems = this.filteredStreams.slice(startIndex, endIndex);
+        
+        if (additionalItems.length === 0) return;
+        
+        let html = '';
+        additionalItems.forEach(stream => {
+            const iconHtml = stream.stream_icon ? 
+                `<img src="${escapeHtml(stream.stream_icon)}" class="stream-icon" alt="Channel icon" onerror="this.style.display='none'">` : 
+                '<div class="stream-icon" style="background-color: #404040;"></div>';
+            
+            const playingClass = this.currentPlayingStreamId === stream.stream_id ? 'playing' : '';
+            
+            html += `
+                <div class="stream-item clickable-stream ${playingClass}" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
+                    ${iconHtml}
+                    <div class="stream-info">
+                        <div class="stream-name">${escapeHtml(stream.name)}</div>
+                        <div class="stream-id">ID: ${stream.stream_id}</div>
+                    </div>
+                    <button class="watch-btn" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
+                        ${playingClass ? 'Now Playing' : 'Watch'}
+                    </button>
+                </div>
+            `;
+        });
+        
+        // Remove any existing loading indicator
+        const loadingContainer = this.container.querySelector('.load-more-container');
+        if (loadingContainer) {
+            loadingContainer.remove();
+        }
+        
+        // Append new items
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        
+        while (tempDiv.firstChild) {
+            this.container.appendChild(tempDiv.firstChild);
+        }
+        
+        // Add event listeners to new items
+        const newItems = this.container.querySelectorAll('.stream-item:not([data-listeners-added])');
+        newItems.forEach(item => {
+            item.setAttribute('data-listeners-added', 'true');
+            
+            const watchBtn = item.querySelector('.watch-btn');
+            if (watchBtn) {
+                watchBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (this.onWatchStream) {
+                        this.onWatchStream(watchBtn.dataset.streamId, watchBtn.dataset.streamName);
+                    }
+                });
+            }
+            
+            item.addEventListener('click', () => {
+                if (this.onWatchStream) {
+                    this.onWatchStream(item.dataset.streamId, item.dataset.streamName);
+                }
+            });
+        });
+        
+        // Add loading indicator if there are still more items
+        const hasMore = this.filteredStreams.length > this.visibleStreams;
+        if (hasMore && this.isLoading) {
+            const loadingHtml = `
+                <div class="load-more-container">
+                    <div class="loading">Loading more streams...</div>
+                </div>
+            `;
+            this.container.insertAdjacentHTML('beforeend', loadingHtml);
+        }
+    }
+
+    renderCurrentState() {
+        // Re-render with current filtered streams and visible count
+        const visibleItems = this.filteredStreams.slice(0, this.visibleStreams);
+        const hasMore = this.filteredStreams.length > this.visibleStreams;
+        
+        // Reset scroll position to top when rendering new streams
+        if (this.container) {
+            requestAnimationFrame(() => {
+                this.container.scrollTop = 0;
+            });
+        }
+        
+        let html = '';
+        visibleItems.forEach(stream => {
+            const iconHtml = stream.stream_icon ? 
+                `<img src="${escapeHtml(stream.stream_icon)}" class="stream-icon" alt="Channel icon" onerror="this.style.display='none'">` : 
+                '<div class="stream-icon" style="background-color: #404040;"></div>';
+            
+            const playingClass = this.currentPlayingStreamId === stream.stream_id ? 'playing' : '';
+            
+            html += `
+                <div class="stream-item clickable-stream ${playingClass}" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
+                    ${iconHtml}
+                    <div class="stream-info">
+                        <div class="stream-name">${escapeHtml(stream.name)}</div>
+                        <div class="stream-id">ID: ${stream.stream_id}</div>
+                    </div>
+                    <button class="watch-btn" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
+                        ${playingClass ? 'Now Playing' : 'Watch'}
+                    </button>
+                </div>
+            `;
+        });
+        
+        // Add loading indicator if there are more items and we're loading
+        if (hasMore && this.isLoading) {
+            html += `
+                <div class="load-more-container">
+                    <div class="loading">Loading more streams...</div>
+                </div>
+            `;
+        }
+        
+        this.container.innerHTML = html;
+        
+        // Add click listeners
+        this.container.querySelectorAll('.watch-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (this.onWatchStream) {
+                    this.onWatchStream(btn.dataset.streamId, btn.dataset.streamName);
+                }
+            });
+        });
+        
+        this.container.querySelectorAll('.clickable-stream').forEach(item => {
+            item.addEventListener('click', () => {
+                if (this.onWatchStream) {
+                    this.onWatchStream(item.dataset.streamId, item.dataset.streamName);
+                }
+            });
+        });
+        
+        // Update panel header
+        const panelTitle = document.querySelector('.right-panel .panel-title');
+        if (panelTitle) {
+            const displayText = this.currentSearchTerm 
+                ? `Streams - ${this.currentCategoryName} (${this.filteredStreams.length} filtered)`
+                : `Streams - ${this.currentCategoryName} (${this.filteredStreams.length})`;
+            panelTitle.textContent = displayText;
+        }
+    }
+
     loadMore() {
         // This method is kept for backward compatibility but now just calls loadMoreAutomatically
         this.loadMoreAutomatically();
@@ -185,25 +392,35 @@ export class StreamList {
 
     filter(searchTerm) {
         const term = searchTerm.trim().toLowerCase();
+        this.currentSearchTerm = term;
         
-        // Reset loading state when filtering
+        // Reset loading state and visible count when filtering
         this.isLoading = false;
+        this.visibleStreams = 30;
         
+        // Apply search filter to original streams
         if (!term) {
-            // Reset to initial state
-            this.visibleStreams = 50;
-            return;
+            // No search term - show all streams (with marker filter applied)
+            this.filteredStreams = this.filterMarkers
+                ? this.allStreams.filter(stream => {
+                    const name = stream.name || '';
+                    return !name.trim().startsWith('###');
+                })
+                : this.allStreams;
+        } else {
+            // Apply both search and marker filters
+            this.filteredStreams = this.allStreams.filter(stream => {
+                const name = stream.name ? stream.name.toLowerCase() : '';
+                const matchesSearch = name.includes(term);
+                const matchesMarkerFilter = !this.filterMarkers || !name.trim().startsWith('###');
+                return matchesSearch && matchesMarkerFilter;
+            });
         }
         
-        // Filter based on search term
-        const filtered = this.allStreams.filter(stream => {
-            const name = stream.name ? stream.name.toLowerCase() : '';
-            return name.includes(term);
-        });
+        // Re-render with filtered results
+        this.renderCurrentState();
         
-        // Show all filtered results when searching
-        this.visibleStreams = Math.max(50, filtered.length);
-        return filtered;
+        return this.filteredStreams;
     }
 
     highlightPlayingStream(streamId) {
