@@ -24,7 +24,7 @@ export class VideoPlayer {
         this.networkCheckInterval = null;
         this.m3u8LoggingEnabled = false;
         this.streamStatsInterval = null;
-        this.lastStatsUpdate = 0;
+        this.lastStreamStats = null;
         
         // Setup fullscreen handlers only once
         if (!VideoPlayer.handlersInitialized) {
@@ -68,9 +68,25 @@ export class VideoPlayer {
         if (!videoInfoDetails || !videoElement) return;
 
         const stats = this.collectStreamStats(videoElement);
-        if (stats) {
+        if (stats && this.hasStatsChanged(stats)) {
             videoInfoDetails.innerHTML = this.formatStreamStats(stats);
+            this.lastStreamStats = { ...stats }; // Store a copy for comparison
         }
+    }
+
+    hasStatsChanged(newStats) {
+        if (!this.lastStreamStats) return true; // First time, always update
+        
+        // Compare all relevant properties
+        const keys = ['resolution', 'bitrate', 'fps', 'codec', 'hlsLevel', 'hlsLevels', 'buffered'];
+        
+        for (const key of keys) {
+            if (this.lastStreamStats[key] !== newStats[key]) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     collectStreamStats(videoElement) {
@@ -82,10 +98,6 @@ export class VideoPlayer {
             fps: null,
             codec: null,
             buffered: null,
-            currentTime: null,
-            duration: null,
-            networkState: null,
-            readyState: null,
             hlsLevel: null,
             hlsLevels: null
         };
@@ -95,25 +107,12 @@ export class VideoPlayer {
             stats.resolution = `${videoElement.videoWidth}×${videoElement.videoHeight}`;
         }
 
-        // Playback info
-        if (!isNaN(videoElement.currentTime)) {
-            stats.currentTime = this.formatTime(videoElement.currentTime);
-        }
-        
-        if (!isNaN(videoElement.duration) && videoElement.duration !== Infinity) {
-            stats.duration = this.formatTime(videoElement.duration);
-        }
-
-        // Buffer info
+        // Buffer info (rounded to avoid frequent changes)
         if (videoElement.buffered && videoElement.buffered.length > 0) {
             const bufferedEnd = videoElement.buffered.end(videoElement.buffered.length - 1);
             const bufferedSeconds = bufferedEnd - videoElement.currentTime;
-            stats.buffered = `${Math.max(0, bufferedSeconds).toFixed(1)}s`;
+            stats.buffered = `${Math.max(0, Math.round(bufferedSeconds))}s`;
         }
-
-        // Network and ready states
-        stats.networkState = this.getNetworkStateText(videoElement.networkState);
-        stats.readyState = this.getReadyStateText(videoElement.readyState);
 
         // HLS-specific info
         if (this.hlsPlayer) {
@@ -169,12 +168,6 @@ export class VideoPlayer {
             items.push(`<span class="stat-item"><strong>Buffer:</strong> ${stats.buffered}</span>`);
         }
 
-        if (stats.currentTime && stats.duration) {
-            items.push(`<span class="stat-item"><strong>Time:</strong> ${stats.currentTime} / ${stats.duration}</span>`);
-        } else if (stats.currentTime) {
-            items.push(`<span class="stat-item"><strong>Time:</strong> ${stats.currentTime}</span>`);
-        }
-
         return items.length > 0 ? items.join(' • ') : 'Loading stream information...';
     }
 
@@ -227,10 +220,10 @@ export class VideoPlayer {
         // Initial update
         this.updateStreamInfo(videoElement);
         
-        // Update every 2 seconds
+        // Update every 5 seconds (less frequent since we're not showing time)
         this.streamStatsInterval = setInterval(() => {
             this.updateStreamInfo(videoElement);
-        }, 2000);
+        }, 5000);
     }
 
     clearStreamStatsMonitoring() {
@@ -238,6 +231,7 @@ export class VideoPlayer {
             clearInterval(this.streamStatsInterval);
             this.streamStatsInterval = null;
         }
+        this.lastStreamStats = null; // Reset comparison data
     }
 
     initializeFullscreenHandlers() {
@@ -286,6 +280,7 @@ export class VideoPlayer {
         this.clearLoadingTimeout();
         this.clearNetworkMonitoring();
         this.clearStreamStatsMonitoring();
+        this.lastStreamStats = null; // Reset stats comparison
         
         // Update UI
         playerTitle.textContent = streamName;
