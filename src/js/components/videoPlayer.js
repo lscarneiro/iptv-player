@@ -353,7 +353,7 @@ export class VideoPlayer {
                                        frag.programDateTime || 
                                        frag.discontinuity ||
                                        frag.gap ||
-                                       frag.byteRange;
+                                       (frag.byteRange && frag.byteRange.length > 0);
                 
                 if (hasSpecialProps) {
                     console.group(`🎬 Fragment ${frag.sn} loaded with special properties`);
@@ -375,7 +375,7 @@ export class VideoPlayer {
                     if (frag.gap) {
                         console.log('🕳️ Gap fragment detected');
                     }
-                    if (frag.byteRange) {
+                    if (frag.byteRange && frag.byteRange.length > 0) {
                         console.log('📏 Byte range:', frag.byteRange);
                     }
                     
