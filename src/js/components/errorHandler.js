@@ -28,9 +28,9 @@ export class ErrorHandler {
                         <button class="error-btn fallback-btn" onclick="document.getElementById('fallbackLinkLarge').scrollIntoView()">
                             🔗 Direct Link
                         </button>
-                        <button class="error-btn close-btn" onclick="window.app.videoPlayer.closeVideoPanel()">
-                            ❌ Close Player
-                        </button>
+                            <button class="error-btn close-btn" onclick="window.app.videoPlayer.closeVideoPanel()">
+                                ❌ Close Stream
+                            </button>
                     </div>
                 </div>
             </div>

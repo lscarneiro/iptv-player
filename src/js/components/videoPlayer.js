@@ -401,7 +401,7 @@ export class VideoPlayer {
                                 🔗 Direct Link
                             </button>
                             <button class="error-btn close-btn" onclick="window.app.videoPlayer.closeVideoPanel()">
-                                ❌ Close Player
+                                ❌ Close Stream
                             </button>
                         </div>
                         <div class="error-details">
@@ -602,6 +602,11 @@ export class VideoPlayer {
         
         if (mainContainer) mainContainer.classList.remove('watching');
         if (videoPanel) videoPanel.style.display = 'none';
+        
+        // Notify mobile navigation that video was closed
+        if (window.app && window.app.mobileNav) {
+            window.app.mobileNav.onVideoClosed();
+        }
         
         this.resetState();
     }

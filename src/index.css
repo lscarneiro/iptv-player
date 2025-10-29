@@ -1181,32 +1181,25 @@ body {
     flex-direction: column;
 }
 
-/* Desktop styling for Change Channel button (looks like original × button) */
-.change-channel-btn {
-    background-color: #404040;
+/* Desktop styling for Close Stream button (blue button like mobile) */
+.close-stream-btn {
+    background-color: #2196F3;
     border: none;
     color: white;
-    padding: 0.5rem;
-    border-radius: 4px;
+    padding: 0.6rem 1.2rem;
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 0; /* Hide the actual text on desktop */
-    width: 2rem;
-    height: 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background-color 0.2s;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+    min-width: 120px;
 }
 
-.change-channel-btn:hover {
-    background-color: #505050;
-}
-
-/* Change the button text content on desktop */
-.change-channel-btn::before {
-    content: "×";
-    font-size: 1.2rem;
-    font-weight: bold;
+.close-stream-btn:hover {
+    background-color: #1976D2;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
 }
 
 /* Mobile layout for touch devices ONLY - single column sliding panels */
@@ -1369,29 +1362,27 @@ body {
         justify-content: center;
     }
 
-    /* Override desktop styling for mobile - show "Change Channel" text */
-    .change-channel-btn {
-        background-color: #007acc !important;
+    /* Override desktop styling for mobile - show "Close Stream" text */
+    .close-stream-btn {
+        background-color: #2196F3 !important;
         color: white;
         border: none;
-        border-radius: 4px;
-        padding: 0.5rem 1rem !important;
+        border-radius: 6px;
+        padding: 0.6rem 1.2rem !important;
         font-size: 0.9rem !important;
         font-weight: 600;
         cursor: pointer;
-        transition: background-color 0.2s;
+        transition: all 0.2s ease;
         white-space: nowrap;
         width: auto !important;
         height: auto !important;
+        box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
     }
     
-    .change-channel-btn:hover {
-        background-color: #005a9e !important;
-    }
-
-    /* Hide the × symbol on mobile and show the text */
-    .change-channel-btn::before {
-        content: none !important;
+    .close-stream-btn:hover {
+        background-color: #1976D2 !important;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
     }
 
     /* Adjust player section for mobile */
