@@ -23,6 +23,8 @@ export class VideoPlayer {
         this.maxLoadingTime = 30000;
         this.networkCheckInterval = null;
         this.m3u8LoggingEnabled = false;
+        this.streamStatsInterval = null;
+        this.lastStreamStats = null;
         
         // Setup fullscreen handlers only once
         if (!VideoPlayer.handlersInitialized) {
@@ -59,6 +61,177 @@ export class VideoPlayer {
             });
             console.groupEnd();
         }
+    }
+
+    updateStreamInfo(videoElement) {
+        const videoInfoDetails = document.getElementById('videoInfoDetails');
+        if (!videoInfoDetails || !videoElement) return;
+
+        const stats = this.collectStreamStats(videoElement);
+        if (stats && this.hasStatsChanged(stats)) {
+            videoInfoDetails.innerHTML = this.formatStreamStats(stats);
+            this.lastStreamStats = { ...stats }; // Store a copy for comparison
+        }
+    }
+
+    hasStatsChanged(newStats) {
+        if (!this.lastStreamStats) return true; // First time, always update
+        
+        // Compare all relevant properties
+        const keys = ['resolution', 'bitrate', 'fps', 'codec', 'hlsLevel', 'hlsLevels', 'buffered'];
+        
+        for (const key of keys) {
+            if (this.lastStreamStats[key] !== newStats[key]) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    collectStreamStats(videoElement) {
+        if (!videoElement) return null;
+
+        const stats = {
+            resolution: null,
+            bitrate: null,
+            fps: null,
+            codec: null,
+            buffered: null,
+            hlsLevel: null,
+            hlsLevels: null
+        };
+
+        // Basic video properties
+        if (videoElement.videoWidth && videoElement.videoHeight) {
+            stats.resolution = `${videoElement.videoWidth}×${videoElement.videoHeight}`;
+        }
+
+        // Buffer info (rounded to avoid frequent changes)
+        if (videoElement.buffered && videoElement.buffered.length > 0) {
+            const bufferedEnd = videoElement.buffered.end(videoElement.buffered.length - 1);
+            const bufferedSeconds = bufferedEnd - videoElement.currentTime;
+            stats.buffered = `${Math.max(0, Math.round(bufferedSeconds))}s`;
+        }
+
+        // HLS-specific info
+        if (this.hlsPlayer) {
+            const currentLevel = this.hlsPlayer.currentLevel;
+            const levels = this.hlsPlayer.levels;
+            
+            if (levels && levels.length > 0 && currentLevel >= 0 && currentLevel < levels.length) {
+                const level = levels[currentLevel];
+                stats.hlsLevel = currentLevel;
+                stats.hlsLevels = levels.length;
+                
+                if (level.bitrate) {
+                    stats.bitrate = this.formatBitrate(level.bitrate);
+                }
+                
+                if (level.attrs && level.attrs['FRAME-RATE']) {
+                    stats.fps = `${parseFloat(level.attrs['FRAME-RATE']).toFixed(1)} fps`;
+                }
+                
+                if (level.attrs && level.attrs['CODECS']) {
+                    stats.codec = level.attrs['CODECS'].split(',')[0]; // Show video codec
+                }
+            }
+        }
+
+        return stats;
+    }
+
+    formatStreamStats(stats) {
+        const items = [];
+
+        if (stats.resolution) {
+            items.push(`<span class="stat-item"><strong>Resolution:</strong> ${stats.resolution}</span>`);
+        }
+
+        if (stats.bitrate) {
+            items.push(`<span class="stat-item"><strong>Bitrate:</strong> ${stats.bitrate}</span>`);
+        }
+
+        if (stats.fps) {
+            items.push(`<span class="stat-item"><strong>FPS:</strong> ${stats.fps}</span>`);
+        }
+
+        if (stats.codec) {
+            items.push(`<span class="stat-item"><strong>Codec:</strong> ${stats.codec}</span>`);
+        }
+
+        if (stats.hlsLevels && stats.hlsLevel !== null) {
+            items.push(`<span class="stat-item"><strong>Quality:</strong> ${stats.hlsLevel + 1}/${stats.hlsLevels}</span>`);
+        }
+
+        if (stats.buffered) {
+            items.push(`<span class="stat-item"><strong>Buffer:</strong> ${stats.buffered}</span>`);
+        }
+
+        return items.length > 0 ? items.join(' • ') : 'Loading stream information...';
+    }
+
+    formatTime(seconds) {
+        if (isNaN(seconds) || seconds < 0) return '0:00';
+        
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        
+        if (hours > 0) {
+            return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    formatBitrate(bitrate) {
+        if (bitrate >= 1000000) {
+            return `${(bitrate / 1000000).toFixed(1)} Mbps`;
+        } else if (bitrate >= 1000) {
+            return `${(bitrate / 1000).toFixed(0)} kbps`;
+        }
+        return `${bitrate} bps`;
+    }
+
+    getNetworkStateText(state) {
+        switch (state) {
+            case 0: return 'Empty';
+            case 1: return 'Idle';
+            case 2: return 'Loading';
+            case 3: return 'No Source';
+            default: return 'Unknown';
+        }
+    }
+
+    getReadyStateText(state) {
+        switch (state) {
+            case 0: return 'No Data';
+            case 1: return 'Metadata';
+            case 2: return 'Current Data';
+            case 3: return 'Future Data';
+            case 4: return 'Enough Data';
+            default: return 'Unknown';
+        }
+    }
+
+    startStreamStatsMonitoring(videoElement) {
+        this.clearStreamStatsMonitoring();
+        
+        // Initial update
+        this.updateStreamInfo(videoElement);
+        
+        // Update every 5 seconds (less frequent since we're not showing time)
+        this.streamStatsInterval = setInterval(() => {
+            this.updateStreamInfo(videoElement);
+        }, 5000);
+    }
+
+    clearStreamStatsMonitoring() {
+        if (this.streamStatsInterval) {
+            clearInterval(this.streamStatsInterval);
+            this.streamStatsInterval = null;
+        }
+        this.lastStreamStats = null; // Reset comparison data
     }
 
     initializeFullscreenHandlers() {
@@ -106,12 +279,14 @@ export class VideoPlayer {
         this.clearBufferingMonitor();
         this.clearLoadingTimeout();
         this.clearNetworkMonitoring();
+        this.clearStreamStatsMonitoring();
+        this.lastStreamStats = null; // Reset stats comparison
         
         // Update UI
         playerTitle.textContent = streamName;
         videoPanelTitle.textContent = streamName;
         videoInfoTitle.textContent = streamName;
-        videoInfoDetails.textContent = '';
+        videoInfoDetails.innerHTML = '<span class="stat-item">Loading stream information...</span>';
         
         fallbackUrl.href = streamUrl;
         fallbackUrl.textContent = streamUrl;
@@ -269,6 +444,8 @@ export class VideoPlayer {
         this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
             console.log('HLS manifest parsed successfully');
             console.log('Available levels:', data.levels?.map(l => `${l.width}x${l.height}@${l.bitrate}`));
+            // Update stream info when manifest is parsed
+            this.updateStreamInfo(videoElement);
             this.attemptAutoplay(videoElement, 'HLS manifest loaded');
         });
 
@@ -331,6 +508,8 @@ export class VideoPlayer {
             if (this.m3u8LoggingEnabled) {
                 console.log('📊 Quality level switched to:', data.level);
             }
+            // Update stream info when quality level changes
+            this.updateStreamInfo(videoElement);
         });
         
         this.hlsPlayer.on(Hls.Events.FRAG_LOADED, (event, data) => {
@@ -342,6 +521,7 @@ export class VideoPlayer {
                 this.clearNetworkMonitoring();
                 this.dismissAutoplayError();
                 this.startBufferingMonitor(videoElement);
+                this.startStreamStatsMonitoring(videoElement);
             }
 
             // Log fragment details for debugging ad-breaks
@@ -397,6 +577,8 @@ export class VideoPlayer {
         
         videoElement.addEventListener('loadedmetadata', () => {
             console.log('Video metadata loaded - dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+            // Update stream info when metadata is loaded
+            this.updateStreamInfo(videoElement);
         });
         
         videoElement.addEventListener('loadeddata', () => {
@@ -412,6 +594,7 @@ export class VideoPlayer {
                 this.clearNetworkMonitoring();
                 this.dismissAutoplayError();
                 this.startBufferingMonitor(videoElement);
+                this.startStreamStatsMonitoring(videoElement);
             }
         });
         
@@ -427,6 +610,7 @@ export class VideoPlayer {
                 this.clearLoadingTimeout();
                 this.clearNetworkMonitoring();
                 this.startBufferingMonitor(videoElement);
+                this.startStreamStatsMonitoring(videoElement);
             }
             this.dismissAutoplayError();
         });
@@ -565,6 +749,7 @@ export class VideoPlayer {
         
         // Stop buffering monitoring
         this.clearBufferingMonitor();
+        this.clearStreamStatsMonitoring();
         
         // Show the stream ended dialog
         this.showStreamEndedDialog();
@@ -697,6 +882,7 @@ export class VideoPlayer {
         this.clearBufferingMonitor();
         this.clearLoadingTimeout();
         this.clearNetworkMonitoring();
+        this.clearStreamStatsMonitoring();
         
         // Pause and stop the video
         if (videoLarge) {
@@ -742,6 +928,7 @@ export class VideoPlayer {
         this.clearBufferingMonitor();
         this.clearLoadingTimeout();
         this.clearNetworkMonitoring();
+        this.clearStreamStatsMonitoring();
         
         // Show appropriate error UI
         this.showError(message, errorType, showRetry);
@@ -1038,6 +1225,7 @@ export class VideoPlayer {
         
         this.clearLoadingTimeout();
         this.clearNetworkMonitoring();
+        this.clearStreamStatsMonitoring();
         
         this.showError('NO_SIGNAL', 
             'The stream is currently showing no signal. This usually means:\n\n' +
@@ -1154,6 +1342,7 @@ export class VideoPlayer {
         this.clearBufferingMonitor();
         this.clearLoadingTimeout();
         this.clearNetworkMonitoring();
+        this.clearStreamStatsMonitoring();
         
         // Stop all video elements
         [videoLarge, video].forEach(v => {

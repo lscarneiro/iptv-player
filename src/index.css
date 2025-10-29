@@ -319,6 +319,26 @@ body {
     color: #ccc;
     font-size: 0.9rem;
     margin-bottom: 0.25rem;
+    line-height: 1.4;
+}
+
+/* Stream statistics styling */
+.video-info .stat-item {
+    display: inline-block;
+    margin: 0.1rem 0;
+    font-size: 0.85rem;
+}
+
+.video-info .stat-item strong {
+    color: #007acc;
+    font-weight: 500;
+}
+
+/* Responsive adjustments for stream stats */
+@media (max-width: 768px) {
+    .video-info .stat-item {
+        font-size: 0.8rem;
+    }
 }
 
 /* Error container styles */
