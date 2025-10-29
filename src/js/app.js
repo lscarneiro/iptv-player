@@ -22,6 +22,10 @@ export class IPTVApp {
         this.currentCategory = null;
         this.currentCategoryName = 'All Channels';
         
+        // Request tracking for preventing race conditions
+        this.currentCategoryLoadId = 0;
+        this.currentStreamLoadId = 0;
+        
         this.init();
     }
 
@@ -234,6 +238,9 @@ export class IPTVApp {
     // Category Management
     async loadCategories(forceRefresh = false) {
         try {
+            // Generate unique request ID
+            const requestId = ++this.currentCategoryLoadId;
+            
             this.categoryList.showLoading('Loading categories...');
             
             let categories = null;
@@ -251,6 +258,12 @@ export class IPTVApp {
                     return nameA.localeCompare(nameB);
                 });
                 await this.storageService.saveToIndexedDB('categories', 'live_categories', categories);
+            }
+            
+            // Only update UI if this is still the latest request
+            if (requestId !== this.currentCategoryLoadId) {
+                console.log('Category load request outdated, skipping UI update');
+                return;
             }
             
             this.categories = categories;
@@ -284,7 +297,10 @@ export class IPTVApp {
                 }
             }
             
-            this.categoryList.render(categories, allChannelsCount);
+            // Final check before updating UI
+            if (requestId === this.currentCategoryLoadId) {
+                this.categoryList.render(categories, allChannelsCount);
+            }
             
         } catch (error) {
             this.categoryList.showError(`Failed to load categories: ${error.message}`);
@@ -303,30 +319,14 @@ export class IPTVApp {
         }, 50);
         
         // Update category count if not already loaded (exclude "All Channels")
+        // This runs in background and doesn't affect UI race conditions
         if (categoryId !== 'all') {
             const categoryItem = document.querySelector(`[data-category-id="${categoryId}"]`);
             const countSpan = categoryItem.querySelector('.category-count');
             
             if (!countSpan) {
-                try {
-                    const streams = await this.apiService.getLiveStreams(categoryId);
-                    const count = streams ? streams.length : 0;
-                    
-                    const nameSpan = categoryItem.querySelector('span:first-child');
-                    if (nameSpan) {
-                        const countHtml = `<span class="category-count">(${count})</span>`;
-                        nameSpan.insertAdjacentHTML('afterend', countHtml);
-                    }
-                    
-                    const category = this.categories.find(c => c.category_id === categoryId);
-                    if (category) {
-                        category.stream_count = count;
-                    }
-                    
-                    await this.storageService.saveToIndexedDB('categories', 'live_categories', this.categories);
-                } catch (error) {
-                    console.error('Failed to get category count:', error);
-                }
+                // Run this in background without blocking UI updates
+                this.updateCategoryCount(categoryId, categoryItem);
             }
         }
         
@@ -342,12 +342,51 @@ export class IPTVApp {
         // Notify mobile navigation
         this.mobileNav.onCategorySelected();
     }
+    
+    // Background method to update category count and cache data
+    async updateCategoryCount(categoryId, categoryItem) {
+        try {
+            const streams = await this.apiService.getLiveStreams(categoryId);
+            const count = streams ? streams.length : 0;
+            
+            // Cache the streams data
+            const cacheKey = `category_${categoryId}`;
+            const sortedStreams = streams.sort((a, b) => {
+                const nameA = a.name ? a.name.toLowerCase() : '';
+                const nameB = b.name ? b.name.toLowerCase() : '';
+                return nameA.localeCompare(nameB);
+            });
+            await this.storageService.saveToIndexedDB('streams', cacheKey, sortedStreams);
+            
+            // Update UI count if element still exists
+            const nameSpan = categoryItem.querySelector('span:first-child');
+            if (nameSpan) {
+                const countHtml = `<span class="category-count">(${count})</span>`;
+                nameSpan.insertAdjacentHTML('afterend', countHtml);
+            }
+            
+            // Update category metadata
+            const category = this.categories.find(c => c.category_id === categoryId);
+            if (category) {
+                category.stream_count = count;
+            }
+            
+            await this.storageService.saveToIndexedDB('categories', 'live_categories', this.categories);
+            
+        } catch (error) {
+            console.error('Failed to get category count:', error);
+        }
+    }
 
     // Stream Management
     async loadStreams(forceRefresh = false) {
         if (!this.currentCategory) return;
         
         try {
+            // Generate unique request ID for this load operation
+            const requestId = ++this.currentStreamLoadId;
+            const categoryId = this.currentCategory;
+            
             // Show the right panel header
             const rightPanelHeader = document.querySelector('.right-panel .panel-header');
             if (rightPanelHeader) {
@@ -357,34 +396,35 @@ export class IPTVApp {
             this.streamList.showLoading('Loading streams...');
             
             let streams = null;
-            const cacheKey = this.currentCategory === 'all' ? 'all_streams' : `category_${this.currentCategory}`;
+            const cacheKey = categoryId === 'all' ? 'all_streams' : `category_${categoryId}`;
             
             if (!forceRefresh) {
                 streams = await this.storageService.getFromIndexedDB('streams', cacheKey);
             }
             
-            if (!streams && forceRefresh) {
+            if (!streams) {
+                // Always fetch and cache data, regardless of UI state
                 streams = await this.apiService.getLiveStreams(
-                    this.currentCategory === 'all' ? null : this.currentCategory
+                    categoryId === 'all' ? null : categoryId
                 );
-                streams = streams.sort((a, b) => {
-                    const nameA = a.name ? a.name.toLowerCase() : '';
-                    const nameB = b.name ? b.name.toLowerCase() : '';
-                    return nameA.localeCompare(nameB);
-                });
-                await this.storageService.saveToIndexedDB('streams', cacheKey, streams);
+                
+                if (streams) {
+                    const sortedStreams = streams.sort((a, b) => {
+                        const nameA = a.name ? a.name.toLowerCase() : '';
+                        const nameB = b.name ? b.name.toLowerCase() : '';
+                        return nameA.localeCompare(nameB);
+                    });
+                    
+                    // Always cache the data
+                    await this.storageService.saveToIndexedDB('streams', cacheKey, sortedStreams);
+                    streams = sortedStreams;
+                }
             }
             
-            if (!streams && !forceRefresh) {
-                streams = await this.apiService.getLiveStreams(
-                    this.currentCategory === 'all' ? null : this.currentCategory
-                );
-                streams = streams.sort((a, b) => {
-                    const nameA = a.name ? a.name.toLowerCase() : '';
-                    const nameB = b.name ? b.name.toLowerCase() : '';
-                    return nameA.localeCompare(nameB);
-                });
-                await this.storageService.saveToIndexedDB('streams', cacheKey, streams);
+            // Only update UI if this is still the latest request AND we're still on the same category
+            if (requestId !== this.currentStreamLoadId || this.currentCategory !== categoryId) {
+                console.log(`Stream load request outdated (${requestId} vs ${this.currentStreamLoadId}) or category changed, skipping UI update`);
+                return;
             }
             
             // Update current category name
@@ -445,6 +485,9 @@ export class IPTVApp {
             // render will call: this.allStreams = filteredStreams where filteredStreams = filtered (after marker filter)
             this.streamList.render(filtered, this.currentCategoryName);
         } catch (error) {
+            if (error.message === 'Request cancelled') {
+                return; // Don't show error for cancelled requests
+            }
             console.error('Error filtering streams:', error);
             // Fallback: reload streams
             await this.loadStreams(false);
