@@ -212,13 +212,16 @@ export class VideoPlayer {
                                 console.log('Full content:');
                                 console.log(content);
                                 
-                                // Extract and highlight tags
+                                // Extract and log tags directly
                                 const lines = content.split('\n');
                                 const tags = lines.filter(line => line.trim().startsWith('#'));
                                 if (tags.length > 0) {
-                                    console.log('\n🏷️ Extracted tags:');
-                                    tags.forEach((tag, index) => {
-                                        console.log(`${index + 1}. ${tag.trim()}`);
+                                    console.log(`\n🏷️ Found ${tags.length} M3U8 tags:`);
+                                    tags.forEach(tag => {
+                                        const trimmedTag = tag.trim();
+                                        if (trimmedTag) {
+                                            console.log(trimmedTag);
+                                        }
                                     });
                                 }
                                 console.groupEnd();
@@ -296,9 +299,12 @@ export class VideoPlayer {
                         frag.tagList && frag.tagList.length > 0
                     );
                     if (specialFragments.length > 0) {
-                        console.log('Fragments with tags:', specialFragments.length);
+                        console.log(`Fragments with tags: ${specialFragments.length}`);
                         specialFragments.forEach((frag, index) => {
-                            console.log(`Fragment ${index + 1} tags:`, frag.tagList);
+                            console.log(`Fragment ${index + 1} tags:`);
+                            frag.tagList.forEach(tag => {
+                                console.log(`  ${tag}`);
+                            });
                         });
                     }
                 }
@@ -355,7 +361,10 @@ export class VideoPlayer {
                     console.log('Duration:', frag.duration);
                     
                     if (frag.tagList?.length > 0) {
-                        console.log('📋 Tags:', frag.tagList);
+                        console.log('📋 Tags:');
+                        frag.tagList.forEach(tag => {
+                            console.log(`  ${tag}`);
+                        });
                     }
                     if (frag.programDateTime) {
                         console.log('🕐 Program Date Time:', frag.programDateTime);

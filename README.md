@@ -110,15 +110,18 @@ The application includes an optional M3U8 tag logging feature for debugging stre
 ### Console Output Examples
 ```
 📄 Raw M3U8 Content from https://example.com/playlist.m3u8
-🏷️ Extracted tags:
-1. #EXTM3U
-2. #EXT-X-VERSION:3
-3. #EXT-X-TARGETDURATION:10
-4. #EXT-X-MEDIA-SEQUENCE:12345
-5. #EXT-X-DISCONTINUITY
-6. #EXT-X-PROGRAM-DATE-TIME:2023-10-29T12:00:00.000Z
+🏷️ Found 6 M3U8 tags:
+#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:10
+#EXT-X-MEDIA-SEQUENCE:12345
+#EXT-X-DISCONTINUITY
+#EXT-X-PROGRAM-DATE-TIME:2023-10-29T12:00:00.000Z
 
 🎬 Fragment 123 loaded with special properties
+📋 Tags:
+  #EXT-X-DISCONTINUITY
+  #EXT-X-PROGRAM-DATE-TIME:2023-10-29T12:00:00.000Z
 ⚠️ Discontinuity detected (possible ad-break)
 🕐 Program Date Time: 2023-10-29T12:00:00.000Z
 ```
