@@ -2,6 +2,7 @@
 
 import { StorageService } from './services/storageService.js';
 import { ApiService } from './services/apiService.js';
+import { FavoritesService } from './services/favoritesService.js';
 import { CategoryList } from './components/categoryList.js';
 import { StreamList } from './components/streamList.js';
 import { VideoPlayer } from './components/videoPlayer.js';
@@ -15,6 +16,7 @@ export class IPTVApp {
     constructor() {
         this.storageService = new StorageService();
         this.apiService = new ApiService(null);
+        this.favoritesService = new FavoritesService(this.storageService);
         this.videoPlayer = new VideoPlayer();
         this.mobileNav = new MobileNavigation();
         
@@ -37,6 +39,12 @@ export class IPTVApp {
             console.warn('IndexedDB initialization failed:', error);
         }
         
+        try {
+            await this.favoritesService.init();
+        } catch (error) {
+            console.warn('Favorites service initialization failed:', error);
+        }
+        
         this.setupComponents();
         this.setupEventListeners();
         this.checkSavedCredentials();
@@ -56,6 +64,22 @@ export class IPTVApp {
         
         this.streamList.setOnWatchStream((streamId, streamName) => {
             this.handleWatchStream(streamId, streamName);
+        });
+
+        // Set up favorites service connections
+        this.streamList.setFavoritesService(this.favoritesService);
+        this.streamList.setOnFavoriteToggle((streamId, isFavorite) => {
+            this.handleFavoriteToggle(streamId, isFavorite);
+        });
+
+        this.videoPlayer.setFavoritesService(this.favoritesService);
+        this.videoPlayer.setOnFavoriteToggle((streamId, isFavorite) => {
+            this.handleFavoriteToggle(streamId, isFavorite);
+        });
+
+        // Set up favorites change listener
+        this.favoritesService.setOnFavoriteChange((streamId, isFavorite) => {
+            this.handleFavoriteChange(streamId, isFavorite);
         });
         
         this.settingsPanel.setOnSubmit((serverUrl, username, password) => {
@@ -310,7 +334,9 @@ export class IPTVApp {
             
             // Final check before updating UI
             if (requestId === this.currentCategoryLoadId) {
-                this.categoryList.render(categories, allChannelsCount);
+                const favoritesCount = this.favoritesService.getFavoriteCount();
+                console.log('App: Rendering categories with favorites count:', favoritesCount);
+                this.categoryList.render(categories, allChannelsCount, favoritesCount);
             }
             
         } catch (error) {
@@ -339,20 +365,25 @@ export class IPTVApp {
             }
         }, 50);
         
-        // Update category count if not already loaded (exclude "All Channels")
-        // This runs in background and doesn't affect UI race conditions
-        if (categoryId !== 'all') {
-            const categoryItem = document.querySelector(`[data-category-id="${categoryId}"]`);
-            const countSpan = categoryItem.querySelector('.category-count');
-            
-            if (!countSpan) {
-                // Run this in background without blocking UI updates
-                this.updateCategoryCount(categoryId, categoryItem);
+        // Handle favorites category
+        if (categoryId === 'favorites') {
+            await this.loadFavoriteStreams();
+        } else {
+            // Update category count if not already loaded (exclude "All Channels")
+            // This runs in background and doesn't affect UI race conditions
+            if (categoryId !== 'all') {
+                const categoryItem = document.querySelector(`[data-category-id="${categoryId}"]`);
+                const countSpan = categoryItem.querySelector('.category-count');
+                
+                if (!countSpan) {
+                    // Run this in background without blocking UI updates
+                    this.updateCategoryCount(categoryId, categoryItem);
+                }
             }
+            
+            // Load streams for the new category
+            await this.loadStreams();
         }
-        
-        // Load streams for the new category
-        await this.loadStreams();
         
         // Notify mobile navigation
         this.mobileNav.onCategorySelected();
@@ -457,7 +488,9 @@ export class IPTVApp {
 
     updateCategoryName() {
         let categoryName = 'All Channels';
-        if (this.currentCategory !== 'all') {
+        if (this.currentCategory === 'favorites') {
+            categoryName = 'Favorites';
+        } else if (this.currentCategory !== 'all') {
             const category = this.categories.find(c => c.category_id === this.currentCategory);
             if (category) {
                 const parts = category.category_name.split('|');
@@ -495,7 +528,7 @@ export class IPTVApp {
                 throw new Error('No valid stream URL found in response');
             }
             
-            this.videoPlayer.playStream(streamUrl, streamName);
+            this.videoPlayer.playStream(streamUrl, streamName, streamId);
             
             // Notify mobile navigation
             this.mobileNav.onStreamStarted();
@@ -504,6 +537,102 @@ export class IPTVApp {
             console.error('Stream loading error:', error);
             this.videoPlayer.showError(`Error: ${error.message}`);
             document.getElementById('playerSection').classList.add('open');
+        }
+    }
+
+    // Favorites Management
+    async loadFavoriteStreams() {
+        try {
+            // Generate unique request ID for this load operation
+            const requestId = ++this.currentStreamLoadId;
+            
+            // Show the right panel header
+            const rightPanelHeader = document.querySelector('.right-panel .panel-header');
+            if (rightPanelHeader) {
+                rightPanelHeader.classList.remove('hidden');
+            }
+            
+            this.streamList.showLoading('Loading favorite streams...');
+            
+            // Get all streams from cache first
+            let allStreams = await this.storageService.getFromIndexedDB('streams', 'all_streams');
+            
+            if (!allStreams) {
+                // If no cached streams, load them
+                allStreams = await this.apiService.getLiveStreams(null);
+                if (allStreams) {
+                    const sortedStreams = allStreams.sort((a, b) => {
+                        const nameA = a.name ? a.name.toLowerCase() : '';
+                        const nameB = b.name ? b.name.toLowerCase() : '';
+                        return nameA.localeCompare(nameB);
+                    });
+                    await this.storageService.saveToIndexedDB('streams', 'all_streams', sortedStreams);
+                    allStreams = sortedStreams;
+                }
+            }
+            
+            // Only update UI if this is still the latest request
+            if (requestId !== this.currentStreamLoadId || this.currentCategory !== 'favorites') {
+                console.log('Favorites load request outdated, skipping UI update');
+                return;
+            }
+            
+            // Filter to only favorite streams
+            const favoriteStreams = this.favoritesService.filterFavoriteStreams(allStreams || []);
+            console.log(`🌟 FAVORITES FILTER: ${allStreams?.length || 0} total streams → ${favoriteStreams.length} favorites`);
+            console.log(`🌟 Current favorites IDs:`, this.favoritesService.getFavorites());
+            if (favoriteStreams.length > 0) {
+                console.log(`🌟 Favorite streams:`, favoriteStreams.map(s => ({ id: s.stream_id, name: s.name })));
+            }
+            
+            // Update current category name
+            this.updateCategoryName();
+            
+            this.streamList.render(favoriteStreams, this.currentCategoryName);
+            
+            // Refresh mobile navigation
+            this.mobileNav.refresh();
+            
+        } catch (error) {
+            this.streamList.showError(`Failed to load favorite streams: ${error.message}`);
+        }
+    }
+
+    handleFavoriteToggle(streamId, isFavorite) {
+        // This is called when a favorite is toggled from either stream list or video player
+        // The favorites service will handle the actual toggle and notify all listeners
+        console.log(`Stream ${streamId} favorite status changed to: ${isFavorite}`);
+    }
+
+    handleFavoriteChange(streamId, isFavorite) {
+        // This is called by the favorites service when any favorite changes
+        // Update UI elements that need to reflect the change
+        console.log(`handleFavoriteChange: Stream ${streamId} favorite status changed to ${isFavorite}`);
+        
+        // Update stream list stars
+        this.streamList.updateStreamFavoriteStatus(streamId, isFavorite);
+        
+        // Update video player star
+        this.videoPlayer.updateCurrentStreamFavoriteStatus(streamId, isFavorite);
+        
+        // Update favorites count in category list
+        const favoritesCount = this.favoritesService.getFavoriteCount();
+        console.log('Updated favorites count:', favoritesCount);
+        const favoritesItem = document.querySelector('[data-category-id="favorites"] .category-count');
+        if (favoritesItem) {
+            favoritesItem.textContent = `(${favoritesCount})`;
+            console.log('Updated favorites count in UI');
+        } else {
+            console.log('Favorites count element not found');
+        }
+        
+        // If we're currently viewing favorites and a stream was unfavorited, refresh the list
+        if (this.currentCategory === 'favorites' && !isFavorite) {
+            console.log('Refreshing favorites list after unfavoriting');
+            // Small delay to allow the UI to update before refreshing
+            setTimeout(() => {
+                this.loadFavoriteStreams();
+            }, 100);
         }
     }
 

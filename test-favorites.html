@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Favorites</title>
+</head>
+<body>
+    <h1>Test Favorites Functionality</h1>
+    <button id="testBtn">Test Favorites</button>
+    <div id="output"></div>
+    
+    <script>
+        document.getElementById('testBtn').addEventListener('click', async () => {
+            const output = document.getElementById('output');
+            output.innerHTML = '';
+            
+            // Test localStorage directly
+            const testData = ['123', '456', '789'];
+            localStorage.setItem('test_favorites', JSON.stringify(testData));
+            
+            const retrieved = JSON.parse(localStorage.getItem('test_favorites'));
+            output.innerHTML += `<p>LocalStorage test: ${JSON.stringify(retrieved)}</p>`;
+            
+            // Test Set with different types
+            const testSet = new Set();
+            testSet.add('123');
+            testSet.add(123);
+            
+            output.innerHTML += `<p>Set with string '123': ${testSet.has('123')}</p>`;
+            output.innerHTML += `<p>Set with number 123: ${testSet.has(123)}</p>`;
+            output.innerHTML += `<p>Set contents: ${JSON.stringify(Array.from(testSet))}</p>`;
+            
+            // Test normalization
+            const normalizedSet = new Set();
+            normalizedSet.add(String('123'));
+            normalizedSet.add(String(123));
+            
+            output.innerHTML += `<p>Normalized set with String('123'): ${normalizedSet.has(String('123'))}</p>`;
+            output.innerHTML += `<p>Normalized set with String(123): ${normalizedSet.has(String(123))}</p>`;
+            output.innerHTML += `<p>Normalized set contents: ${JSON.stringify(Array.from(normalizedSet))}</p>`;
+        });
+    </script>
+</body>
+</html>

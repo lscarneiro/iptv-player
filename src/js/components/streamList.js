@@ -16,6 +16,8 @@ export class StreamList {
         this.currentSearchTerm = ''; // Track current search
         this.renderRequestId = 0; // Prevent race conditions
         this.isDestroyed = false; // Track component lifecycle
+        this.favoritesService = null; // Will be set by app
+        this.onFavoriteToggle = null; // Callback for favorite toggle
         
         this.setupInfiniteScroll();
     }
@@ -103,6 +105,15 @@ export class StreamList {
         this.onWatchStream = callback;
     }
 
+    setFavoritesService(favoritesService) {
+        this.favoritesService = favoritesService;
+        console.log('StreamList: Favorites service set:', !!favoritesService);
+    }
+
+    setOnFavoriteToggle(callback) {
+        this.onFavoriteToggle = callback;
+    }
+
     setFilterMarkers(value) {
         this.filterMarkers = value;
         // Re-apply current filter with new marker setting
@@ -177,6 +188,11 @@ export class StreamList {
             // Add playing class if this is the currently playing stream
             const playingClass = this.currentPlayingStreamId === stream.stream_id ? 'playing' : '';
             
+            // Check if stream is favorited
+            const isFavorite = this.favoritesService ? this.favoritesService.isFavorite(stream.stream_id) : false;
+            const starClass = isFavorite ? 'favorite-star favorited' : 'favorite-star';
+            const starIcon = isFavorite ? '★' : '☆';
+            
             html += `
                 <div class="stream-item clickable-stream ${playingClass}" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
                     ${iconHtml}
@@ -184,9 +200,14 @@ export class StreamList {
                         <div class="stream-name">${escapeHtml(stream.name)}</div>
                         <div class="stream-id">ID: ${stream.stream_id}</div>
                     </div>
-                    <button class="watch-btn" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
-                        ${playingClass ? 'Now Playing' : 'Watch'}
-                    </button>
+                    <div class="stream-actions">
+                        <button class="${starClass}" data-stream-id="${stream.stream_id}" title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">
+                            ${starIcon}
+                        </button>
+                        <button class="watch-btn" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
+                            ${playingClass ? 'Now Playing' : 'Watch'}
+                        </button>
+                    </div>
                 </div>
             `;
         });
@@ -209,6 +230,14 @@ export class StreamList {
                 if (this.onWatchStream) {
                     this.onWatchStream(btn.dataset.streamId, btn.dataset.streamName);
                 }
+            });
+        });
+
+        // Add click listeners for favorite stars
+        this.container.querySelectorAll('.favorite-star').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.handleFavoriteToggle(btn.dataset.streamId, btn);
             });
         });
         
@@ -242,6 +271,11 @@ export class StreamList {
             
             const playingClass = this.currentPlayingStreamId === stream.stream_id ? 'playing' : '';
             
+            // Check if stream is favorited
+            const isFavorite = this.favoritesService ? this.favoritesService.isFavorite(stream.stream_id) : false;
+            const starClass = isFavorite ? 'favorite-star favorited' : 'favorite-star';
+            const starIcon = isFavorite ? '★' : '☆';
+            
             html += `
                 <div class="stream-item clickable-stream ${playingClass}" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
                     ${iconHtml}
@@ -249,9 +283,14 @@ export class StreamList {
                         <div class="stream-name">${escapeHtml(stream.name)}</div>
                         <div class="stream-id">ID: ${stream.stream_id}</div>
                     </div>
-                    <button class="watch-btn" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
-                        ${playingClass ? 'Now Playing' : 'Watch'}
-                    </button>
+                    <div class="stream-actions">
+                        <button class="${starClass}" data-stream-id="${stream.stream_id}" title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">
+                            ${starIcon}
+                        </button>
+                        <button class="watch-btn" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
+                            ${playingClass ? 'Now Playing' : 'Watch'}
+                        </button>
+                    </div>
                 </div>
             `;
         });
@@ -282,6 +321,14 @@ export class StreamList {
                     if (this.onWatchStream) {
                         this.onWatchStream(watchBtn.dataset.streamId, watchBtn.dataset.streamName);
                     }
+                });
+            }
+
+            const favoriteBtn = item.querySelector('.favorite-star');
+            if (favoriteBtn) {
+                favoriteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.handleFavoriteToggle(favoriteBtn.dataset.streamId, favoriteBtn);
                 });
             }
             
@@ -324,6 +371,11 @@ export class StreamList {
             
             const playingClass = this.currentPlayingStreamId === stream.stream_id ? 'playing' : '';
             
+            // Check if stream is favorited
+            const isFavorite = this.favoritesService ? this.favoritesService.isFavorite(stream.stream_id) : false;
+            const starClass = isFavorite ? 'favorite-star favorited' : 'favorite-star';
+            const starIcon = isFavorite ? '★' : '☆';
+            
             html += `
                 <div class="stream-item clickable-stream ${playingClass}" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
                     ${iconHtml}
@@ -331,9 +383,14 @@ export class StreamList {
                         <div class="stream-name">${escapeHtml(stream.name)}</div>
                         <div class="stream-id">ID: ${stream.stream_id}</div>
                     </div>
-                    <button class="watch-btn" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
-                        ${playingClass ? 'Now Playing' : 'Watch'}
-                    </button>
+                    <div class="stream-actions">
+                        <button class="${starClass}" data-stream-id="${stream.stream_id}" title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">
+                            ${starIcon}
+                        </button>
+                        <button class="watch-btn" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
+                            ${playingClass ? 'Now Playing' : 'Watch'}
+                        </button>
+                    </div>
                 </div>
             `;
         });
@@ -356,6 +413,14 @@ export class StreamList {
                 if (this.onWatchStream) {
                     this.onWatchStream(btn.dataset.streamId, btn.dataset.streamName);
                 }
+            });
+        });
+
+        // Add click listeners for favorite stars
+        this.container.querySelectorAll('.favorite-star').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.handleFavoriteToggle(btn.dataset.streamId, btn);
             });
         });
         
@@ -454,6 +519,56 @@ export class StreamList {
             const watchBtn = item.querySelector('.watch-btn');
             if (watchBtn) {
                 watchBtn.textContent = 'Watch';
+            }
+        });
+    }
+
+    async handleFavoriteToggle(streamId, buttonElement) {
+        console.log(`🌟 FAVORITE TOGGLE: StreamId=${streamId} (${typeof streamId}), Service=${!!this.favoritesService}`);
+        
+        if (!this.favoritesService) {
+            console.warn('Favorites service not available');
+            return;
+        }
+
+        try {
+            const beforeState = this.favoritesService.isFavorite(streamId);
+            console.log(`🌟 Before toggle: ${beforeState}`);
+            
+            const isFavorite = await this.favoritesService.toggleFavorite(streamId);
+            console.log(`🌟 After toggle: ${isFavorite}`);
+            console.log(`🌟 All favorites now:`, this.favoritesService.getFavorites());
+            
+            this.updateFavoriteButton(buttonElement, isFavorite);
+            
+            // Notify app about favorite change
+            if (this.onFavoriteToggle) {
+                this.onFavoriteToggle(streamId, isFavorite);
+            }
+        } catch (error) {
+            console.error('Failed to toggle favorite:', error);
+        }
+    }
+
+    updateFavoriteButton(buttonElement, isFavorite) {
+        if (isFavorite) {
+            buttonElement.classList.add('favorited');
+            buttonElement.textContent = '★';
+            buttonElement.title = 'Remove from favorites';
+        } else {
+            buttonElement.classList.remove('favorited');
+            buttonElement.textContent = '☆';
+            buttonElement.title = 'Add to favorites';
+        }
+    }
+
+    // Update all favorite stars for a specific stream (used when favorite changes from video player)
+    updateStreamFavoriteStatus(streamId, isFavorite) {
+        const streamItems = this.container.querySelectorAll(`[data-stream-id="${streamId}"]`);
+        streamItems.forEach(item => {
+            const favoriteBtn = item.querySelector('.favorite-star');
+            if (favoriteBtn) {
+                this.updateFavoriteButton(favoriteBtn, isFavorite);
             }
         });
     }
