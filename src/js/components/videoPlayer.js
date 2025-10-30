@@ -10,6 +10,7 @@ export class VideoPlayer {
         this.isWatching = false;
         this.currentStreamUrl = null;
         this.currentStreamName = null;
+        this.currentStreamId = null;
         this.playbackStarted = false;
         this.retryManager = new RetryManager(5);
         this.bufferingCheckInterval = null;
@@ -25,6 +26,8 @@ export class VideoPlayer {
         this.m3u8LoggingEnabled = false;
         this.streamStatsInterval = null;
         this.lastStreamStats = null;
+        this.favoritesService = null;
+        this.onFavoriteToggle = null;
         
         // Setup fullscreen handlers only once
         if (!VideoPlayer.handlersInitialized) {
@@ -43,6 +46,14 @@ export class VideoPlayer {
     setM3u8LoggingEnabled(enabled) {
         this.m3u8LoggingEnabled = enabled;
         console.log(`M3U8 tag logging ${enabled ? 'enabled' : 'disabled'}`);
+    }
+
+    setFavoritesService(favoritesService) {
+        this.favoritesService = favoritesService;
+    }
+
+    setOnFavoriteToggle(callback) {
+        this.onFavoriteToggle = callback;
     }
 
     logM3u8Tags(content, type = 'manifest') {
@@ -251,7 +262,7 @@ export class VideoPlayer {
         }
     }
 
-    playStream(streamUrl, streamName) {
+    playStream(streamUrl, streamName, streamId) {
         const videoLarge = document.getElementById('videoPlayerLarge');
         const playerSection = document.getElementById('playerSection');
         const videoPanel = document.getElementById('videoPanel');
@@ -271,6 +282,7 @@ export class VideoPlayer {
         // Reset state for new stream
         this.currentStreamUrl = streamUrl;
         this.currentStreamName = streamName;
+        this.currentStreamId = streamId;
         this.playbackStarted = false;
         this.streamEndDetected = false;
         this.fragmentErrors = [];
@@ -292,6 +304,9 @@ export class VideoPlayer {
         fallbackUrl.textContent = streamUrl;
         fallbackUrlLarge.href = streamUrl;
         fallbackUrlLarge.textContent = streamUrl;
+        
+        // Setup favorite star
+        this.setupFavoriteStar(streamId);
         
         // Show 3-column layout
         mainContainer.classList.add('watching');
@@ -903,10 +918,17 @@ export class VideoPlayer {
         // Reset state
         this.currentStreamUrl = null;
         this.currentStreamName = null;
+        this.currentStreamId = null;
         this.playbackStarted = false;
         this.retryManager.reset();
         this.streamEndDetected = false;
         this.fragmentErrors = [];
+        
+        // Hide favorite star
+        const favoriteStarBtn = document.getElementById('videoFavoriteStar');
+        if (favoriteStarBtn) {
+            favoriteStarBtn.style.display = 'none';
+        }
         
         // Hide error and 3-column layout
         this.hideError();
@@ -1365,11 +1387,77 @@ export class VideoPlayer {
         // Reset all state
         this.currentStreamUrl = null;
         this.currentStreamName = null;
+        this.currentStreamId = null;
         this.playbackStarted = false;
         this.retryManager.reset();
         this.streamEndDetected = false;
         this.fragmentErrors = [];
         this.isWatching = false;
+    }
+
+    setupFavoriteStar(streamId) {
+        const favoriteStarBtn = document.getElementById('videoFavoriteStar');
+        if (!favoriteStarBtn || !streamId) return;
+
+        // Show the star button
+        favoriteStarBtn.style.display = 'inline-block';
+        favoriteStarBtn.dataset.streamId = streamId;
+
+        // Update star state based on current favorite status
+        if (this.favoritesService) {
+            const isFavorite = this.favoritesService.isFavorite(streamId);
+            this.updateVideoFavoriteStar(isFavorite);
+        }
+
+        // Remove any existing event listeners
+        const newBtn = favoriteStarBtn.cloneNode(true);
+        favoriteStarBtn.parentNode.replaceChild(newBtn, favoriteStarBtn);
+
+        // Add click event listener
+        newBtn.addEventListener('click', () => {
+            this.handleVideoFavoriteToggle(streamId);
+        });
+    }
+
+    async handleVideoFavoriteToggle(streamId) {
+        if (!this.favoritesService) {
+            console.warn('Favorites service not available');
+            return;
+        }
+
+        try {
+            const isFavorite = await this.favoritesService.toggleFavorite(streamId);
+            this.updateVideoFavoriteStar(isFavorite);
+            
+            // Notify app about favorite change
+            if (this.onFavoriteToggle) {
+                this.onFavoriteToggle(streamId, isFavorite);
+            }
+        } catch (error) {
+            console.error('Failed to toggle favorite:', error);
+        }
+    }
+
+    updateVideoFavoriteStar(isFavorite) {
+        const favoriteStarBtn = document.getElementById('videoFavoriteStar');
+        if (!favoriteStarBtn) return;
+
+        if (isFavorite) {
+            favoriteStarBtn.classList.add('favorited');
+            favoriteStarBtn.textContent = '★';
+            favoriteStarBtn.title = 'Remove from favorites';
+        } else {
+            favoriteStarBtn.classList.remove('favorited');
+            favoriteStarBtn.textContent = '☆';
+            favoriteStarBtn.title = 'Add to favorites';
+        }
+    }
+
+    // Update video favorite star when changed from stream list
+    updateCurrentStreamFavoriteStatus(streamId, isFavorite) {
+        if (this.currentStreamId === streamId) {
+            this.updateVideoFavoriteStar(isFavorite);
+        }
     }
 }
 

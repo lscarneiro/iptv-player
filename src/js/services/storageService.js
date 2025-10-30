@@ -32,6 +32,11 @@ export class StorageService {
                 if (!db.objectStoreNames.contains('userInfo')) {
                     db.createObjectStore('userInfo', { keyPath: 'key' });
                 }
+                
+                // Favorites store
+                if (!db.objectStoreNames.contains('favorites')) {
+                    db.createObjectStore('favorites', { keyPath: 'key' });
+                }
             };
         });
     }
@@ -79,7 +84,7 @@ export class StorageService {
             return Promise.resolve();
         }
         return new Promise((resolve, reject) => {
-            const stores = ['categories', 'streams', 'userInfo'];
+            const stores = ['categories', 'streams', 'userInfo', 'favorites'];
             const transaction = this.db.transaction(stores, 'readwrite');
             
             let completed = 0;

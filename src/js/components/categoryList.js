@@ -13,7 +13,7 @@ export class CategoryList {
         this.onCategorySelect = callback;
     }
 
-    render(categories, allChannelsCount = 0) {
+    render(categories, allChannelsCount = 0, favoritesCount = 0) {
         // Group categories by prefix (before |)
         const groups = {};
         categories.forEach(category => {
@@ -40,6 +40,10 @@ export class CategoryList {
                 <div class="category-item special" data-category-id="all">
                     <span>All Channels</span>
                     <span class="category-count">(${allChannelsCount})</span>
+                </div>
+                <div class="category-item special favorites" data-category-id="favorites">
+                    <span>⭐ Favorites</span>
+                    <span class="category-count">(${favoritesCount})</span>
                 </div>
             </div>
         `;
