@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Favorites</title>
+</head>
+<body>
+    <h1>Debug Favorites</h1>
+    <div id="debug-output"></div>
+    
+    <script type="module">
+        import { StorageService } from './src/js/services/storageService.js';
+        import { FavoritesService } from './src/js/services/favoritesService.js';
+        
+        async function debugFavorites() {
+            const output = document.getElementById('debug-output');
+            
+            try {
+                // Initialize services
+                const storageService = new StorageService();
+                await storageService.init();
+                
+                const favoritesService = new FavoritesService(storageService);
+                await favoritesService.init();
+                
+                output.innerHTML += '<p>Services initialized successfully</p>';
+                
+                // Test adding a favorite
+                const testStreamId = "12345";
+                output.innerHTML += `<p>Testing with stream ID: ${testStreamId} (type: ${typeof testStreamId})</p>`;
+                
+                // Check initial state
+                const initialState = favoritesService.isFavorite(testStreamId);
+                output.innerHTML += `<p>Initial favorite state: ${initialState}</p>`;
+                
+                // Add to favorites
+                await favoritesService.addFavorite(testStreamId);
+                output.innerHTML += '<p>Added to favorites</p>';
+                
+                // Check state after adding
+                const afterAddState = favoritesService.isFavorite(testStreamId);
+                output.innerHTML += `<p>State after adding: ${afterAddState}</p>`;
+                
+                // Get all favorites
+                const allFavorites = favoritesService.getFavorites();
+                output.innerHTML += `<p>All favorites: ${JSON.stringify(allFavorites)}</p>`;
+                
+                // Test with different type (number)
+                const testStreamIdNum = 12345;
+                output.innerHTML += `<p>Testing with stream ID as number: ${testStreamIdNum} (type: ${typeof testStreamIdNum})</p>`;
+                
+                const numericState = favoritesService.isFavorite(testStreamIdNum);
+                output.innerHTML += `<p>Numeric ID favorite state: ${numericState}</p>`;
+                
+                // Test filtering
+                const testStreams = [
+                    { stream_id: "12345", name: "Test Stream 1" },
+                    { stream_id: 12345, name: "Test Stream 1 (numeric)" },
+                    { stream_id: "67890", name: "Test Stream 2" },
+                    { stream_id: 67890, name: "Test Stream 2 (numeric)" }
+                ];
+                
+                const filteredStreams = favoritesService.filterFavoriteStreams(testStreams);
+                output.innerHTML += `<p>Filtered streams: ${JSON.stringify(filteredStreams.map(s => ({id: s.stream_id, name: s.name})))}</p>`;
+                
+            } catch (error) {
+                output.innerHTML += `<p style="color: red;">Error: ${error.message}</p>`;
+                console.error('Debug error:', error);
+            }
+        }
+        
+        debugFavorites();
+    </script>
+</body>
+</html>

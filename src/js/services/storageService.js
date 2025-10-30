@@ -7,7 +7,7 @@ export class StorageService {
 
     async init() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open('IPTVPlayerDB', 1);
+            const request = indexedDB.open('IPTVPlayerDB', 2); // Increment version to trigger upgrade
             
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
@@ -17,26 +17,33 @@ export class StorageService {
             
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
+                console.log('IndexedDB upgrade needed, creating stores...');
                 
                 // Categories store
                 if (!db.objectStoreNames.contains('categories')) {
                     db.createObjectStore('categories', { keyPath: 'key' });
+                    console.log('Created categories store');
                 }
                 
                 // Streams store
                 if (!db.objectStoreNames.contains('streams')) {
                     db.createObjectStore('streams', { keyPath: 'key' });
+                    console.log('Created streams store');
                 }
                 
                 // User info store
                 if (!db.objectStoreNames.contains('userInfo')) {
                     db.createObjectStore('userInfo', { keyPath: 'key' });
+                    console.log('Created userInfo store');
                 }
                 
                 // Favorites store
                 if (!db.objectStoreNames.contains('favorites')) {
                     db.createObjectStore('favorites', { keyPath: 'key' });
+                    console.log('Created favorites store');
                 }
+                
+                console.log('Available stores:', Array.from(db.objectStoreNames));
             };
         });
     }
@@ -48,12 +55,20 @@ export class StorageService {
             return Promise.resolve();
         }
         return new Promise((resolve, reject) => {
-            const transaction = this.db.transaction([storeName], 'readwrite');
-            const store = transaction.objectStore(storeName);
-            const request = store.put({ key, data, timestamp: Date.now() });
-            
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
+            try {
+                const transaction = this.db.transaction([storeName], 'readwrite');
+                const store = transaction.objectStore(storeName);
+                const request = store.put({ key, data, timestamp: Date.now() });
+                
+                request.onsuccess = () => resolve();
+                request.onerror = () => {
+                    console.error(`Failed to save to IndexedDB: ${storeName}/${key}`, request.error);
+                    reject(request.error);
+                };
+            } catch (error) {
+                console.error(`Error accessing IndexedDB store ${storeName}:`, error);
+                reject(error);
+            }
         });
     }
 
@@ -63,18 +78,26 @@ export class StorageService {
             return Promise.resolve(null);
         }
         return new Promise((resolve, reject) => {
-            const transaction = this.db.transaction([storeName], 'readonly');
-            const store = transaction.objectStore(storeName);
-            const request = store.get(key);
-            
-            request.onsuccess = () => {
-                if (request.result) {
-                    resolve(request.result.data);
-                } else {
-                    resolve(null);
-                }
-            };
-            request.onerror = () => reject(request.error);
+            try {
+                const transaction = this.db.transaction([storeName], 'readonly');
+                const store = transaction.objectStore(storeName);
+                const request = store.get(key);
+                
+                request.onsuccess = () => {
+                    if (request.result) {
+                        resolve(request.result.data);
+                    } else {
+                        resolve(null);
+                    }
+                };
+                request.onerror = () => {
+                    console.error(`Failed to read from IndexedDB: ${storeName}/${key}`, request.error);
+                    reject(request.error);
+                };
+            } catch (error) {
+                console.error(`Error accessing IndexedDB store ${storeName}:`, error);
+                reject(error);
+            }
         });
     }
 

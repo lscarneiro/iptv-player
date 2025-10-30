@@ -107,6 +107,7 @@ export class StreamList {
 
     setFavoritesService(favoritesService) {
         this.favoritesService = favoritesService;
+        console.log('StreamList: Favorites service set:', !!favoritesService);
     }
 
     setOnFavoriteToggle(callback) {
@@ -523,13 +524,21 @@ export class StreamList {
     }
 
     async handleFavoriteToggle(streamId, buttonElement) {
+        console.log(`🌟 FAVORITE TOGGLE: StreamId=${streamId} (${typeof streamId}), Service=${!!this.favoritesService}`);
+        
         if (!this.favoritesService) {
             console.warn('Favorites service not available');
             return;
         }
 
         try {
+            const beforeState = this.favoritesService.isFavorite(streamId);
+            console.log(`🌟 Before toggle: ${beforeState}`);
+            
             const isFavorite = await this.favoritesService.toggleFavorite(streamId);
+            console.log(`🌟 After toggle: ${isFavorite}`);
+            console.log(`🌟 All favorites now:`, this.favoritesService.getFavorites());
+            
             this.updateFavoriteButton(buttonElement, isFavorite);
             
             // Notify app about favorite change

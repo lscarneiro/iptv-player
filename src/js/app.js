@@ -335,6 +335,7 @@ export class IPTVApp {
             // Final check before updating UI
             if (requestId === this.currentCategoryLoadId) {
                 const favoritesCount = this.favoritesService.getFavoriteCount();
+                console.log('App: Rendering categories with favorites count:', favoritesCount);
                 this.categoryList.render(categories, allChannelsCount, favoritesCount);
             }
             
@@ -578,6 +579,11 @@ export class IPTVApp {
             
             // Filter to only favorite streams
             const favoriteStreams = this.favoritesService.filterFavoriteStreams(allStreams || []);
+            console.log(`🌟 FAVORITES FILTER: ${allStreams?.length || 0} total streams → ${favoriteStreams.length} favorites`);
+            console.log(`🌟 Current favorites IDs:`, this.favoritesService.getFavorites());
+            if (favoriteStreams.length > 0) {
+                console.log(`🌟 Favorite streams:`, favoriteStreams.map(s => ({ id: s.stream_id, name: s.name })));
+            }
             
             // Update current category name
             this.updateCategoryName();
@@ -601,6 +607,7 @@ export class IPTVApp {
     handleFavoriteChange(streamId, isFavorite) {
         // This is called by the favorites service when any favorite changes
         // Update UI elements that need to reflect the change
+        console.log(`handleFavoriteChange: Stream ${streamId} favorite status changed to ${isFavorite}`);
         
         // Update stream list stars
         this.streamList.updateStreamFavoriteStatus(streamId, isFavorite);
@@ -610,13 +617,18 @@ export class IPTVApp {
         
         // Update favorites count in category list
         const favoritesCount = this.favoritesService.getFavoriteCount();
+        console.log('Updated favorites count:', favoritesCount);
         const favoritesItem = document.querySelector('[data-category-id="favorites"] .category-count');
         if (favoritesItem) {
             favoritesItem.textContent = `(${favoritesCount})`;
+            console.log('Updated favorites count in UI');
+        } else {
+            console.log('Favorites count element not found');
         }
         
         // If we're currently viewing favorites and a stream was unfavorited, refresh the list
         if (this.currentCategory === 'favorites' && !isFavorite) {
+            console.log('Refreshing favorites list after unfavoriting');
             // Small delay to allow the UI to update before refreshing
             setTimeout(() => {
                 this.loadFavoriteStreams();

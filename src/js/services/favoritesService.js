@@ -12,17 +12,23 @@ export class FavoritesService {
         try {
             const savedFavorites = await this.storageService.getFromIndexedDB('favorites', 'favorite_streams');
             if (savedFavorites && Array.isArray(savedFavorites)) {
-                this.favorites = new Set(savedFavorites);
+                // Normalize all loaded IDs to strings
+                const normalizedFavorites = savedFavorites.map(id => String(id));
+                this.favorites = new Set(normalizedFavorites);
+                console.log('Favorites loaded from IndexedDB:', Array.from(this.favorites));
             }
         } catch (error) {
-            console.warn('Failed to load favorites from storage:', error);
+            console.warn('Failed to load favorites from IndexedDB:', error);
             // Fallback to localStorage
             const fallbackFavorites = localStorage.getItem('favorite_streams');
             if (fallbackFavorites) {
                 try {
                     const parsed = JSON.parse(fallbackFavorites);
                     if (Array.isArray(parsed)) {
-                        this.favorites = new Set(parsed);
+                        // Normalize all loaded IDs to strings
+                        const normalizedFavorites = parsed.map(id => String(id));
+                        this.favorites = new Set(normalizedFavorites);
+                        console.log('Favorites loaded from localStorage:', Array.from(this.favorites));
                     }
                 } catch (e) {
                     console.warn('Failed to parse favorites from localStorage:', e);
@@ -38,24 +44,31 @@ export class FavoritesService {
 
     // Check if a stream is favorited
     isFavorite(streamId) {
-        return this.favorites.has(streamId);
+        // Normalize to string to handle type mismatches
+        const normalizedId = String(streamId);
+        const result = this.favorites.has(normalizedId);
+        return result;
     }
 
     // Add a stream to favorites
     async addFavorite(streamId) {
-        if (!this.favorites.has(streamId)) {
-            this.favorites.add(streamId);
+        // Normalize to string to handle type mismatches
+        const normalizedId = String(streamId);
+        if (!this.favorites.has(normalizedId)) {
+            this.favorites.add(normalizedId);
             await this.saveFavorites();
-            this.notifyChange(streamId, true);
+            this.notifyChange(normalizedId, true);
         }
     }
 
     // Remove a stream from favorites
     async removeFavorite(streamId) {
-        if (this.favorites.has(streamId)) {
-            this.favorites.delete(streamId);
+        // Normalize to string to handle type mismatches
+        const normalizedId = String(streamId);
+        if (this.favorites.has(normalizedId)) {
+            this.favorites.delete(normalizedId);
             await this.saveFavorites();
-            this.notifyChange(streamId, false);
+            this.notifyChange(normalizedId, false);
         }
     }
 
