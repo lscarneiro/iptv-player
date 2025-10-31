@@ -262,6 +262,12 @@ export class IPTVApp {
                 credentials.username !== username ||
                 credentials.password !== password;
             
+            // Only clear cache if credentials changed (do this BEFORE saving new data)
+            if (credentialsChanged) {
+                console.log('Credentials changed, clearing old cache...');
+                await this.storageService.clearIndexedDB();
+            }
+            
             // Save credentials
             this.storageService.saveCredentials(serverUrl, username, password);
             
@@ -272,13 +278,8 @@ export class IPTVApp {
             // Validate credentials and get user info
             const userInfo = await this.apiService.getUserInfo();
             
-            // Cache user info
+            // Cache user info (after clearing old cache)
             await this.storageService.saveToIndexedDB('userInfo', 'user_info', userInfo);
-            
-            // Only clear cache if credentials changed
-            if (credentialsChanged) {
-                await this.storageService.clearIndexedDB();
-            }
             
             // Show main interface
             this.showMainInterface();
