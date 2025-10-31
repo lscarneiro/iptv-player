@@ -1415,6 +1415,11 @@ export class VideoPlayer {
         mainContainer.classList.remove('watching');
         videoPanel.style.display = 'none';
         
+        // Clear the "Now Playing" state in stream list
+        if (window.app && window.app.streamList) {
+            window.app.streamList.clearPlayingHighlight();
+        }
+        
         // Notify mobile navigation
         if (window.app && window.app.mobileNav) {
             window.app.mobileNav.onVideoClosed();
