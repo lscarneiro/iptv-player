@@ -24,6 +24,7 @@ export class VideoPlayer {
         this.maxMediaErrors = 3;
         this.unsupportedFormatDetected = false;
         this.webCodecsHevcSupported = false;
+        this.isHandlingError = false;
         this.loadingTimeout = null;
         this.maxLoadingTime = 30000;
         this.networkCheckInterval = null;
@@ -330,6 +331,7 @@ export class VideoPlayer {
         this.autoplayErrorShown = false;
         this.mediaErrorCount = 0;
         this.unsupportedFormatDetected = false;
+        this.isHandlingError = false;
         this.retryManager.reset();
         this.clearBufferingMonitor();
         this.clearLoadingTimeout();
@@ -820,6 +822,12 @@ export class VideoPlayer {
     }
 
     handleVideoError(error) {
+        // Prevent handling the same error multiple times
+        if (this.isHandlingError) {
+            console.log('Already handling an error, ignoring duplicate');
+            return;
+        }
+        
         const videoElement = error.target;
         const errorCode = videoElement.error ? videoElement.error.code : 'unknown';
         const errorMessage = videoElement.error ? videoElement.error.message : 'Unknown error';
@@ -833,11 +841,25 @@ export class VideoPlayer {
             
             // If we keep getting error code 4, the format is unsupported
             if (this.mediaErrorCount >= this.maxMediaErrors) {
+                this.isHandlingError = true;
                 this.unsupportedFormatDetected = true;
+                
+                // Stop the video element to prevent more error events
+                videoElement.removeAttribute('src');
+                videoElement.load();
+                
                 this.handleUnsupportedFormat(errorCode, errorMessage);
                 return;
             }
         }
+        
+        // Set flag to prevent duplicate error handling
+        this.isHandlingError = true;
+        
+        // Clear the flag after a short delay
+        setTimeout(() => {
+            this.isHandlingError = false;
+        }, 1000);
         
         if (!this.playbackStarted) {
             // Give more specific guidance for different error codes
