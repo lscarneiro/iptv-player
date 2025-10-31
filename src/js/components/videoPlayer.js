@@ -781,7 +781,10 @@ export class VideoPlayer {
 
     handleMediaError(details, data, videoElement) {
         if (details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
-            this.recordBufferingEvent('buffer_stalled');
+            // Don't record buffering if we've detected format issues
+            if (!this.unsupportedFormatDetected && !this.isHandlingError) {
+                this.recordBufferingEvent('buffer_stalled');
+            }
             return;
         }
         
@@ -792,7 +795,20 @@ export class VideoPlayer {
             console.warn(`HLS parsing error (${details}), count: ${this.mediaErrorCount}/${this.maxMediaErrors}`);
             
             if (this.mediaErrorCount >= this.maxMediaErrors) {
+                this.isHandlingError = true;
                 this.unsupportedFormatDetected = true;
+                
+                // CRITICAL: Stop all monitoring and recovery attempts
+                this.clearBufferingMonitor();
+                this.clearLoadingTimeout();
+                this.clearNetworkMonitoring();
+                this.clearStreamStatsMonitoring();
+                
+                // Stop HLS player
+                if (this.hlsPlayer) {
+                    this.hlsPlayer.stopLoad();
+                }
+                
                 this.handleError('UNSUPPORTED_FORMAT', 
                     `This stream cannot be parsed or decoded by your browser.\n\n` +
                     `**Error:** ${details}\n\n` +
@@ -844,9 +860,20 @@ export class VideoPlayer {
                 this.isHandlingError = true;
                 this.unsupportedFormatDetected = true;
                 
+                // CRITICAL: Stop all monitoring and recovery attempts
+                this.clearBufferingMonitor();
+                this.clearLoadingTimeout();
+                this.clearNetworkMonitoring();
+                this.clearStreamStatsMonitoring();
+                
                 // Stop the video element to prevent more error events
                 videoElement.removeAttribute('src');
                 videoElement.load();
+                
+                // Stop HLS player
+                if (this.hlsPlayer) {
+                    this.hlsPlayer.stopLoad();
+                }
                 
                 this.handleUnsupportedFormat(errorCode, errorMessage);
                 return;
@@ -855,6 +882,9 @@ export class VideoPlayer {
         
         // Set flag to prevent duplicate error handling
         this.isHandlingError = true;
+        
+        // Stop buffering monitor immediately to prevent rapid retries
+        this.clearBufferingMonitor();
         
         // Clear the flag after a short delay
         setTimeout(() => {
@@ -1195,6 +1225,18 @@ export class VideoPlayer {
         this.clearBufferingMonitor();
         
         this.bufferingCheckInterval = setInterval(() => {
+            // Stop monitoring if unsupported format detected
+            if (this.unsupportedFormatDetected) {
+                console.log('Stopping buffering monitor - unsupported format detected');
+                this.clearBufferingMonitor();
+                return;
+            }
+            
+            // Stop monitoring if handling error
+            if (this.isHandlingError) {
+                return;
+            }
+            
             if (!videoElement.paused && !videoElement.ended) {
                 const currentTime = videoElement.currentTime;
                 
@@ -1220,8 +1262,23 @@ export class VideoPlayer {
     }
 
     recordBufferingEvent(type) {
+        // Don't record buffering events if we've detected an unsupported format
+        // This prevents rapid-fire buffer attempts when the real issue is codec incompatibility
+        if (this.unsupportedFormatDetected) {
+            console.log('Ignoring buffering event - unsupported format already detected');
+            return;
+        }
+        
+        // Don't record buffering events if we're handling an error
+        if (this.isHandlingError) {
+            console.log('Ignoring buffering event - error is being handled');
+            return;
+        }
+        
         const now = Date.now();
         this.bufferingEvents.push({ type, timestamp: now });
+        
+        console.log(`Buffering event recorded: ${type} (total: ${this.bufferingEvents.length})`);
         
         // Keep only events from last 2 minutes
         this.bufferingEvents = this.bufferingEvents.filter(
@@ -1230,12 +1287,22 @@ export class VideoPlayer {
     }
 
     checkBufferingHealth() {
+        // Don't check buffering health if we've detected an unsupported format
+        if (this.unsupportedFormatDetected) {
+            return;
+        }
+        
+        // Don't check buffering health if we're handling an error
+        if (this.isHandlingError) {
+            return;
+        }
+        
         const recentEvents = this.bufferingEvents.filter(
             event => Date.now() - event.timestamp < 60000 // Last minute
         );
         
         if (recentEvents.length >= 5) {
-            console.warn('Frequent buffering detected, suggesting stream reload');
+            console.warn(`Frequent buffering detected (${recentEvents.length} events), suggesting stream reload`);
             this.showBufferingIssueDialog();
         }
     }
