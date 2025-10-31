@@ -23,6 +23,7 @@ export class VideoPlayer {
         this.mediaErrorCount = 0;
         this.maxMediaErrors = 3;
         this.unsupportedFormatDetected = false;
+        this.webCodecsHevcSupported = false;
         this.loadingTimeout = null;
         this.maxLoadingTime = 30000;
         this.networkCheckInterval = null;
@@ -378,8 +379,8 @@ export class VideoPlayer {
     }
 
     setupHlsPlayer(streamUrl, videoElement) {
-        // Check browser codec support
-        this.logBrowserCapabilities();
+        // Check browser codec support (async but don't wait)
+        this.logBrowserCapabilities().catch(e => console.warn('Codec detection error:', e));
         
         const hlsConfig = {
             enableWorker: true,
@@ -820,47 +821,112 @@ export class VideoPlayer {
         }
     }
 
-    logBrowserCapabilities() {
+    async logBrowserCapabilities() {
         console.group('🔍 Browser Media Capabilities');
+        
+        // Detect browser and OS
+        const userAgent = navigator.userAgent;
+        const isSafari = /Safari/.test(userAgent) && !/Chrome/.test(userAgent);
+        const isEdge = /Edg/.test(userAgent);
+        const isChrome = /Chrome/.test(userAgent) && !isEdge;
+        const isFirefox = /Firefox/.test(userAgent);
+        const isMac = /Mac/.test(userAgent);
+        const isWindows = /Win/.test(userAgent);
+        const isIOS = /iPhone|iPad|iPod/.test(userAgent);
+        
+        console.log(`Browser: ${isSafari ? 'Safari' : isEdge ? 'Edge' : isChrome ? 'Chrome' : isFirefox ? 'Firefox' : 'Unknown'}`);
+        console.log(`OS: ${isMac ? 'macOS' : isWindows ? 'Windows' : isIOS ? 'iOS' : 'Other'}`);
         
         // Check MediaSource support
         if (window.MediaSource) {
             console.log('✅ MediaSource API supported');
             
-            // Common video codecs
+            // Common video codecs with detailed H.265 variants
             const videoCodecs = [
-                'video/mp4; codecs="avc1.42E01E"',  // H.264 Baseline
-                'video/mp4; codecs="avc1.4D401E"',  // H.264 Main
-                'video/mp4; codecs="avc1.64001E"',  // H.264 High
-                'video/mp4; codecs="hev1.1.6.L93.B0"', // H.265/HEVC
-                'video/mp4; codecs="av01.0.05M.08"',   // AV1
-                'video/webm; codecs="vp8"',         // VP8
-                'video/webm; codecs="vp9"',         // VP9
+                { mime: 'video/mp4; codecs="avc1.42E01E"', name: 'H.264 Baseline' },
+                { mime: 'video/mp4; codecs="avc1.4D401E"', name: 'H.264 Main' },
+                { mime: 'video/mp4; codecs="avc1.64001E"', name: 'H.264 High' },
+                { mime: 'video/mp4; codecs="hev1.1.6.L93.B0"', name: 'H.265/HEVC Main' },
+                { mime: 'video/mp4; codecs="hvc1.1.6.L93.B0"', name: 'H.265/HEVC Main (hvc1)' },
+                { mime: 'video/mp4; codecs="hev1.2.4.L93.B0"', name: 'H.265/HEVC Main10' },
+                { mime: 'video/mp4; codecs="av01.0.05M.08"', name: 'AV1' },
+                { mime: 'video/webm; codecs="vp8"', name: 'VP8' },
+                { mime: 'video/webm; codecs="vp9"', name: 'VP9' },
             ];
             
-            console.log('Video codec support:');
-            videoCodecs.forEach(codec => {
-                const supported = MediaSource.isTypeSupported(codec);
+            console.log('Video codec support (MediaSource):');
+            const hevcSupported = [];
+            videoCodecs.forEach(({mime, name}) => {
+                const supported = MediaSource.isTypeSupported(mime);
                 const status = supported ? '✅' : '❌';
-                console.log(`  ${status} ${codec}`);
+                console.log(`  ${status} ${name}`);
+                if (supported && name.includes('H.265')) {
+                    hevcSupported.push(name);
+                }
             });
+            
+            // Special H.265/HEVC guidance
+            if (hevcSupported.length > 0) {
+                console.log('🎉 H.265/HEVC is supported on this browser!');
+            } else {
+                console.warn('⚠️  H.265/HEVC is NOT supported');
+                if (isSafari || isIOS) {
+                    console.log('💡 Tip: Safari usually supports H.265, but MediaSource API might not expose it');
+                } else if (isEdge && isWindows) {
+                    console.log('💡 Tip: Edge on Windows may support H.265 with hardware acceleration enabled');
+                    console.log('   Check: edge://flags/#enable-media-foundation-for-hevc');
+                } else if (isChrome) {
+                    console.log('💡 Tip: Chrome does not support H.265 due to licensing. Try:');
+                    console.log('   • Open the stream in VLC Media Player');
+                    console.log('   • Use Safari (if on macOS)');
+                    console.log('   • Use Edge with hardware acceleration');
+                }
+            }
             
             // Common audio codecs
             const audioCodecs = [
-                'audio/mp4; codecs="mp4a.40.2"',    // AAC-LC
-                'audio/mp4; codecs="mp4a.40.5"',    // HE-AAC
-                'audio/mpeg',                        // MP3
-                'audio/webm; codecs="opus"',        // Opus
+                { mime: 'audio/mp4; codecs="mp4a.40.2"', name: 'AAC-LC' },
+                { mime: 'audio/mp4; codecs="mp4a.40.5"', name: 'HE-AAC' },
+                { mime: 'audio/mpeg', name: 'MP3' },
+                { mime: 'audio/webm; codecs="opus"', name: 'Opus' },
             ];
             
             console.log('Audio codec support:');
-            audioCodecs.forEach(codec => {
-                const supported = MediaSource.isTypeSupported(codec);
+            audioCodecs.forEach(({mime, name}) => {
+                const supported = MediaSource.isTypeSupported(mime);
                 const status = supported ? '✅' : '❌';
-                console.log(`  ${status} ${codec}`);
+                console.log(`  ${status} ${name}`);
             });
         } else {
             console.warn('❌ MediaSource API not supported');
+        }
+        
+        // Check WebCodecs API (newer standard for codec access)
+        if (window.VideoDecoder) {
+            console.log('✅ WebCodecs API available');
+            
+            // Check H.265 support via WebCodecs
+            try {
+                const hevcConfig = {
+                    codec: 'hev1.1.6.L93.B0',
+                    codedWidth: 1920,
+                    codedHeight: 1080
+                };
+                
+                const support = await VideoDecoder.isConfigSupported(hevcConfig);
+                if (support.supported) {
+                    console.log('🎉 H.265/HEVC decoding available via WebCodecs!');
+                    console.log('   Hardware acceleration:', support.config.hardwareAcceleration || 'unknown');
+                    this.webCodecsHevcSupported = true;
+                } else {
+                    console.log('❌ H.265/HEVC not supported via WebCodecs');
+                }
+            } catch (e) {
+                console.log('⚠️  Could not check WebCodecs H.265 support:', e.message);
+            }
+        } else {
+            console.log('❌ WebCodecs API not available');
+            console.log('   (WebCodecs is a newer API for advanced codec support)');
         }
         
         // Check HLS.js support
@@ -874,6 +940,9 @@ export class VideoPlayer {
     validateStreamCodecs(levels) {
         console.group('🎬 Stream Codec Validation');
         
+        let hasHevc = false;
+        let allLevelsUnsupported = true;
+        
         levels.forEach((level, index) => {
             const codecs = level.attrs?.CODECS || level.codecs;
             if (codecs) {
@@ -882,6 +951,8 @@ export class VideoPlayer {
                 
                 // Try to determine if codecs are supported
                 const codecParts = codecs.split(',').map(c => c.trim());
+                let levelSupported = false;
+                
                 codecParts.forEach(codec => {
                     let mimeType = '';
                     let supported = false;
@@ -891,21 +962,33 @@ export class VideoPlayer {
                         mimeType = `video/mp4; codecs="${codec}"`;
                         supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
                         console.log(`  ${supported ? '✅' : '❌'} H.264 (${codec})`);
+                        if (supported) levelSupported = true;
                     } else if (codec.startsWith('hev1') || codec.startsWith('hvc1')) {
+                        hasHevc = true;
                         mimeType = `video/mp4; codecs="${codec}"`;
                         supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
-                        console.log(`  ${supported ? '✅' : '⚠️ '} H.265/HEVC (${codec}) - May not be supported!`);
-                        if (!supported) {
-                            console.warn('  ⚠️  This stream uses H.265/HEVC which is not widely supported in browsers');
+                        
+                        if (supported) {
+                            console.log(`  ✅ H.265/HEVC (${codec}) - SUPPORTED!`);
+                            levelSupported = true;
+                        } else {
+                            console.log(`  ⚠️  H.265/HEVC (${codec}) - NOT SUPPORTED`);
+                            
+                            // Check if WebCodecs might help
+                            if (this.webCodecsHevcSupported) {
+                                console.log(`     💡 WebCodecs may provide H.265 support`);
+                            }
                         }
                     } else if (codec.startsWith('av01')) {
                         mimeType = `video/mp4; codecs="${codec}"`;
                         supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
                         console.log(`  ${supported ? '✅' : '❌'} AV1 (${codec})`);
+                        if (supported) levelSupported = true;
                     } else if (codec.startsWith('vp')) {
                         mimeType = `video/webm; codecs="${codec}"`;
                         supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
                         console.log(`  ${supported ? '✅' : '❌'} ${codec.toUpperCase()}`);
+                        if (supported) levelSupported = true;
                     }
                     // Audio codecs
                     else if (codec.startsWith('mp4a')) {
@@ -920,10 +1003,29 @@ export class VideoPlayer {
                         console.log(`  ❓ Unknown codec: ${codec}`);
                     }
                 });
+                
+                if (levelSupported) {
+                    allLevelsUnsupported = false;
+                }
             } else {
                 console.warn(`Level ${index}: No codec information available`);
             }
         });
+        
+        // Show summary and recommendations
+        if (hasHevc && allLevelsUnsupported) {
+            console.group('⚠️  CODEC COMPATIBILITY WARNING');
+            console.warn('All quality levels use H.265/HEVC which is not supported by this browser');
+            console.log('');
+            console.log('📋 Recommended solutions:');
+            console.log('1. Use VLC Media Player with the direct stream link');
+            console.log('2. Try Safari browser (if on macOS/iOS)');
+            console.log('3. Try Microsoft Edge with hardware acceleration enabled');
+            console.log('4. Request server to provide H.264 streams');
+            console.groupEnd();
+        } else if (hasHevc && !allLevelsUnsupported) {
+            console.log('ℹ️  Stream has both H.265 and supported codecs - should work');
+        }
         
         console.groupEnd();
     }
@@ -956,17 +1058,54 @@ export class VideoPlayer {
             this.hlsPlayer.stopLoad();
         }
         
+        // Detect browser and provide specific guidance
+        const userAgent = navigator.userAgent;
+        const isSafari = /Safari/.test(userAgent) && !/Chrome/.test(userAgent);
+        const isEdge = /Edg/.test(userAgent);
+        const isChrome = /Chrome/.test(userAgent) && !isEdge;
+        const isFirefox = /Firefox/.test(userAgent);
+        const isMac = /Mac/.test(userAgent);
+        const isWindows = /Win/.test(userAgent);
+        const isIOS = /iPhone|iPad|iPod/.test(userAgent);
+        
+        let browserSpecificHelp = '';
+        
+        if (isChrome) {
+            browserSpecificHelp = `\n**Chrome Users:**\n` +
+                `• Chrome doesn't support H.265/HEVC due to patent licensing\n` +
+                `• ✅ Try Safari (macOS) or Edge (Windows) instead\n` +
+                `• ✅ Use VLC Media Player with the direct link`;
+        } else if (isFirefox) {
+            browserSpecificHelp = `\n**Firefox Users:**\n` +
+                `• Firefox has limited H.265/HEVC support\n` +
+                `• ✅ Try Safari (macOS) or Edge (Windows) instead\n` +
+                `• ✅ Use VLC Media Player with the direct link`;
+        } else if (isEdge && isWindows) {
+            browserSpecificHelp = `\n**Edge Users (Windows):**\n` +
+                `• Edge can support H.265 with hardware acceleration\n` +
+                `• Try enabling: edge://flags/#enable-media-foundation-for-hevc\n` +
+                `• Make sure GPU hardware acceleration is enabled\n` +
+                `• ✅ Or use VLC Media Player with the direct link`;
+        } else if (isSafari || isIOS) {
+            browserSpecificHelp = `\n**Safari Users:**\n` +
+                `• Safari normally supports H.265/HEVC natively\n` +
+                `• This error suggests a different issue\n` +
+                `• Try refreshing the page or checking for Safari updates\n` +
+                `• ✅ Use VLC Media Player if issues persist`;
+        }
+        
         const errorDetails = `This stream cannot be played in your browser.\n\n` +
             `**Error Code:** ${errorCode} (MEDIA_ERR_SRC_NOT_SUPPORTED)\n\n` +
             `**Most likely cause:**\n` +
-            `• The stream uses an unsupported video codec (e.g., H.265/HEVC instead of H.264)\n` +
+            `• The stream uses H.265/HEVC codec (not widely supported in browsers)\n` +
             `• The stream uses an unsupported audio codec\n` +
-            `• Your browser doesn't support this stream format\n\n` +
+            `• Your browser/device doesn't have the required codecs\n` +
+            browserSpecificHelp + `\n\n` +
             `**Recommended solutions:**\n` +
-            `1. Use the direct link below to open the stream in VLC Media Player\n` +
-            `2. Try a different browser (Chrome, Firefox, or Edge)\n` +
-            `3. Check if your browser supports hardware video decoding\n` +
-            `4. Try another stream from the list`;
+            `1. 🎬 Download VLC Media Player (free) and use the direct link below\n` +
+            `2. 🌐 Try a different browser (Safari on Mac, Edge on Windows)\n` +
+            `3. 📺 Try another stream that may use H.264 codec\n` +
+            `4. 💻 Check for browser/OS updates`;
         
         this.handleError('UNSUPPORTED_FORMAT', errorDetails, false);
     }
