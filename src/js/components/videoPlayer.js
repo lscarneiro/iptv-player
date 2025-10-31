@@ -20,6 +20,9 @@ export class VideoPlayer {
         this.fragmentErrors = [];
         this.maxFragmentErrors = 8;
         this.autoplayErrorShown = false;
+        this.mediaErrorCount = 0;
+        this.maxMediaErrors = 3;
+        this.unsupportedFormatDetected = false;
         this.loadingTimeout = null;
         this.maxLoadingTime = 30000;
         this.networkCheckInterval = null;
@@ -279,6 +282,13 @@ export class VideoPlayer {
         // Force cleanup to prevent race conditions
         this.forceCleanupCurrentStream();
         
+        // Don't allow starting a new stream if current one is known to be unsupported
+        // (unless it's a different stream)
+        if (this.unsupportedFormatDetected && this.currentStreamUrl === streamUrl) {
+            console.warn('Refusing to restart stream that was detected as unsupported');
+            return;
+        }
+        
         // Reset state for new stream
         this.currentStreamUrl = streamUrl;
         this.currentStreamName = streamName;
@@ -287,6 +297,8 @@ export class VideoPlayer {
         this.streamEndDetected = false;
         this.fragmentErrors = [];
         this.autoplayErrorShown = false;
+        this.mediaErrorCount = 0;
+        this.unsupportedFormatDetected = false;
         this.retryManager.reset();
         this.clearBufferingMonitor();
         this.clearLoadingTimeout();
@@ -366,6 +378,9 @@ export class VideoPlayer {
     }
 
     setupHlsPlayer(streamUrl, videoElement) {
+        // Check browser codec support
+        this.logBrowserCapabilities();
+        
         const hlsConfig = {
             enableWorker: true,
             lowLatencyMode: true,
@@ -459,6 +474,12 @@ export class VideoPlayer {
         this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
             console.log('HLS manifest parsed successfully');
             console.log('Available levels:', data.levels?.map(l => `${l.width}x${l.height}@${l.bitrate}`));
+            
+            // Check codec compatibility
+            if (data.levels && data.levels.length > 0) {
+                this.validateStreamCodecs(data.levels);
+            }
+            
             // Update stream info when manifest is parsed
             this.updateStreamInfo(videoElement);
             this.attemptAutoplay(videoElement, 'HLS manifest loaded');
@@ -580,7 +601,19 @@ export class VideoPlayer {
         });
         
         this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
-            console.error('HLS error:', data);
+            console.group('❌ HLS Error Details');
+            console.error('Type:', data.type);
+            console.error('Details:', data.details);
+            console.error('Fatal:', data.fatal);
+            if (data.reason) console.error('Reason:', data.reason);
+            if (data.frag) console.error('Fragment:', data.frag.url);
+            if (data.response) {
+                console.error('Response code:', data.response.code);
+                console.error('Response text:', data.response.text);
+            }
+            if (data.error) console.error('Error object:', data.error);
+            console.groupEnd();
+            
             this.handleHlsError(data, videoElement);
         });
     }
@@ -719,9 +752,29 @@ export class VideoPlayer {
             return;
         }
         
+        // Check for codec/format issues
+        if (details === Hls.ErrorDetails.FRAG_PARSING_ERROR || 
+            details === Hls.ErrorDetails.MANIFEST_PARSING_ERROR) {
+            this.mediaErrorCount++;
+            console.warn(`HLS parsing error (${details}), count: ${this.mediaErrorCount}/${this.maxMediaErrors}`);
+            
+            if (this.mediaErrorCount >= this.maxMediaErrors) {
+                this.unsupportedFormatDetected = true;
+                this.handleError('UNSUPPORTED_FORMAT', 
+                    `This stream cannot be parsed or decoded by your browser.\n\n` +
+                    `**Error:** ${details}\n\n` +
+                    `**Possible causes:**\n` +
+                    `• Unsupported video codec (H.265/HEVC, AV1, etc.)\n` +
+                    `• Unsupported audio codec\n` +
+                    `• Corrupted or malformed stream data\n\n` +
+                    `**Solution:** Use VLC or another media player with the direct link below.`);
+                return;
+            }
+        }
+        
         if (!this.playbackStarted) {
             this.handleError('MEDIA_ERROR', 
-                'Media format error. This stream format may not be supported by your browser.');
+                `Media format error: ${details}\n\nThis stream format may not be supported by your browser.`);
         } else {
             // Try to recover from media error
             try {
@@ -738,15 +791,184 @@ export class VideoPlayer {
     handleVideoError(error) {
         const videoElement = error.target;
         const errorCode = videoElement.error ? videoElement.error.code : 'unknown';
+        const errorMessage = videoElement.error ? videoElement.error.message : 'Unknown error';
+        
+        console.log(`Video error details - Code: ${errorCode}, Message: ${errorMessage}`);
+        
+        // Error code 4 = MEDIA_ERR_SRC_NOT_SUPPORTED - format/codec not supported
+        if (errorCode === 4) {
+            this.mediaErrorCount++;
+            console.warn(`Media error count: ${this.mediaErrorCount}/${this.maxMediaErrors}`);
+            
+            // If we keep getting error code 4, the format is unsupported
+            if (this.mediaErrorCount >= this.maxMediaErrors) {
+                this.unsupportedFormatDetected = true;
+                this.handleUnsupportedFormat(errorCode, errorMessage);
+                return;
+            }
+        }
         
         if (!this.playbackStarted) {
+            // Give more specific guidance for different error codes
+            let errorDetails = this.getVideoErrorDetails(errorCode);
             this.handleError('VIDEO_LOAD_ERROR', 
-                `Failed to load video (Error code: ${errorCode}). The stream may be incompatible with your browser.`);
+                `Failed to load video (Error code: ${errorCode})\n\n${errorDetails}`);
         } else {
             this.handleError('VIDEO_PLAYBACK_ERROR', 
                 `Video playback error (Error code: ${errorCode}).`,
                 true);
         }
+    }
+
+    logBrowserCapabilities() {
+        console.group('🔍 Browser Media Capabilities');
+        
+        // Check MediaSource support
+        if (window.MediaSource) {
+            console.log('✅ MediaSource API supported');
+            
+            // Common video codecs
+            const videoCodecs = [
+                'video/mp4; codecs="avc1.42E01E"',  // H.264 Baseline
+                'video/mp4; codecs="avc1.4D401E"',  // H.264 Main
+                'video/mp4; codecs="avc1.64001E"',  // H.264 High
+                'video/mp4; codecs="hev1.1.6.L93.B0"', // H.265/HEVC
+                'video/mp4; codecs="av01.0.05M.08"',   // AV1
+                'video/webm; codecs="vp8"',         // VP8
+                'video/webm; codecs="vp9"',         // VP9
+            ];
+            
+            console.log('Video codec support:');
+            videoCodecs.forEach(codec => {
+                const supported = MediaSource.isTypeSupported(codec);
+                const status = supported ? '✅' : '❌';
+                console.log(`  ${status} ${codec}`);
+            });
+            
+            // Common audio codecs
+            const audioCodecs = [
+                'audio/mp4; codecs="mp4a.40.2"',    // AAC-LC
+                'audio/mp4; codecs="mp4a.40.5"',    // HE-AAC
+                'audio/mpeg',                        // MP3
+                'audio/webm; codecs="opus"',        // Opus
+            ];
+            
+            console.log('Audio codec support:');
+            audioCodecs.forEach(codec => {
+                const supported = MediaSource.isTypeSupported(codec);
+                const status = supported ? '✅' : '❌';
+                console.log(`  ${status} ${codec}`);
+            });
+        } else {
+            console.warn('❌ MediaSource API not supported');
+        }
+        
+        // Check HLS.js support
+        if (window.Hls) {
+            console.log('✅ HLS.js available (version: ' + Hls.version + ')');
+        }
+        
+        console.groupEnd();
+    }
+
+    validateStreamCodecs(levels) {
+        console.group('🎬 Stream Codec Validation');
+        
+        levels.forEach((level, index) => {
+            const codecs = level.attrs?.CODECS || level.codecs;
+            if (codecs) {
+                console.log(`Level ${index}: ${level.width}x${level.height}`);
+                console.log(`  Codecs: ${codecs}`);
+                
+                // Try to determine if codecs are supported
+                const codecParts = codecs.split(',').map(c => c.trim());
+                codecParts.forEach(codec => {
+                    let mimeType = '';
+                    let supported = false;
+                    
+                    // Video codecs
+                    if (codec.startsWith('avc1')) {
+                        mimeType = `video/mp4; codecs="${codec}"`;
+                        supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
+                        console.log(`  ${supported ? '✅' : '❌'} H.264 (${codec})`);
+                    } else if (codec.startsWith('hev1') || codec.startsWith('hvc1')) {
+                        mimeType = `video/mp4; codecs="${codec}"`;
+                        supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
+                        console.log(`  ${supported ? '✅' : '⚠️ '} H.265/HEVC (${codec}) - May not be supported!`);
+                        if (!supported) {
+                            console.warn('  ⚠️  This stream uses H.265/HEVC which is not widely supported in browsers');
+                        }
+                    } else if (codec.startsWith('av01')) {
+                        mimeType = `video/mp4; codecs="${codec}"`;
+                        supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
+                        console.log(`  ${supported ? '✅' : '❌'} AV1 (${codec})`);
+                    } else if (codec.startsWith('vp')) {
+                        mimeType = `video/webm; codecs="${codec}"`;
+                        supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
+                        console.log(`  ${supported ? '✅' : '❌'} ${codec.toUpperCase()}`);
+                    }
+                    // Audio codecs
+                    else if (codec.startsWith('mp4a')) {
+                        mimeType = `audio/mp4; codecs="${codec}"`;
+                        supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
+                        console.log(`  ${supported ? '✅' : '❌'} AAC (${codec})`);
+                    } else if (codec.toLowerCase().includes('opus')) {
+                        mimeType = `audio/webm; codecs="opus"`;
+                        supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
+                        console.log(`  ${supported ? '✅' : '❌'} Opus`);
+                    } else {
+                        console.log(`  ❓ Unknown codec: ${codec}`);
+                    }
+                });
+            } else {
+                console.warn(`Level ${index}: No codec information available`);
+            }
+        });
+        
+        console.groupEnd();
+    }
+
+    getVideoErrorDetails(errorCode) {
+        switch (errorCode) {
+            case 1: // MEDIA_ERR_ABORTED
+                return '**Cause:** Playback was aborted by the user or browser.\n**Solution:** Try playing the stream again.';
+            case 2: // MEDIA_ERR_NETWORK
+                return '**Cause:** Network error while loading the stream.\n**Solution:** Check your internet connection and try again.';
+            case 3: // MEDIA_ERR_DECODE
+                return '**Cause:** The video file is corrupted or the format is invalid.\n**Solution:** The stream may have technical issues. Try another stream or contact support.';
+            case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
+                return '**Cause:** The video format or codec is not supported by your browser.\n**Possible reasons:**\n• Stream uses H.265/HEVC codec (not widely supported)\n• Stream uses unsupported audio codec\n• Container format incompatibility\n\n**Solution:** Try opening the stream in VLC or another media player using the direct link below.';
+            default:
+                return 'The stream may be incompatible with your browser.';
+        }
+    }
+
+    handleUnsupportedFormat(errorCode, errorMessage) {
+        console.error('Unsupported stream format detected - stopping retry attempts');
+        
+        // Stop any ongoing loading or retries
+        this.clearLoadingTimeout();
+        this.clearNetworkMonitoring();
+        this.clearBufferingMonitor();
+        this.clearStreamStatsMonitoring();
+        
+        if (this.hlsPlayer) {
+            this.hlsPlayer.stopLoad();
+        }
+        
+        const errorDetails = `This stream cannot be played in your browser.\n\n` +
+            `**Error Code:** ${errorCode} (MEDIA_ERR_SRC_NOT_SUPPORTED)\n\n` +
+            `**Most likely cause:**\n` +
+            `• The stream uses an unsupported video codec (e.g., H.265/HEVC instead of H.264)\n` +
+            `• The stream uses an unsupported audio codec\n` +
+            `• Your browser doesn't support this stream format\n\n` +
+            `**Recommended solutions:**\n` +
+            `1. Use the direct link below to open the stream in VLC Media Player\n` +
+            `2. Try a different browser (Chrome, Firefox, or Edge)\n` +
+            `3. Check if your browser supports hardware video decoding\n` +
+            `4. Try another stream from the list`;
+        
+        this.handleError('UNSUPPORTED_FORMAT', errorDetails, false);
     }
 
     handleStreamEnded() {
@@ -1006,6 +1228,8 @@ export class VideoPlayer {
                 return 'Autoplay Blocked';
             case 'UNSUPPORTED':
                 return 'Unsupported Format';
+            case 'UNSUPPORTED_FORMAT':
+                return '❌ Stream Format Not Supported';
             case 'BUFFERING_ISSUES':
                 return 'Frequent Buffering Detected';
             case 'NO_SIGNAL':
@@ -1016,6 +1240,8 @@ export class VideoPlayer {
                 return 'No Internet Connection';
             case 'PLAYBACK_FAILED':
                 return 'Playback Failed';
+            case 'VIDEO_LOAD_ERROR':
+                return 'Failed to Load Stream';
             default:
                 return 'Playback Error';
         }
@@ -1121,6 +1347,8 @@ export class VideoPlayer {
             // Reset error tracking when manually reloading
             this.bufferingEvents = [];
             this.fragmentErrors = [];
+            this.mediaErrorCount = 0;
+            this.unsupportedFormatDetected = false;
             this.retryManager.reset();
             this.streamEndDetected = false;
             const videoElement = document.getElementById('videoPlayerLarge');
@@ -1389,6 +1617,8 @@ export class VideoPlayer {
         this.currentStreamName = null;
         this.currentStreamId = null;
         this.playbackStarted = false;
+        this.mediaErrorCount = 0;
+        this.unsupportedFormatDetected = false;
         this.retryManager.reset();
         this.streamEndDetected = false;
         this.fragmentErrors = [];
