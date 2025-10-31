@@ -93,7 +93,7 @@ export class VideoPlayer {
         if (!this.lastStreamStats) return true; // First time, always update
         
         // Compare all relevant properties
-        const keys = ['resolution', 'bitrate', 'fps', 'codec', 'hlsLevel', 'hlsLevels', 'buffered'];
+        const keys = ['resolution', 'bitrate', 'fps', 'videoCodec', 'audioCodec', 'hlsLevel', 'hlsLevels', 'buffered'];
         
         for (const key of keys) {
             if (this.lastStreamStats[key] !== newStats[key]) {
@@ -111,7 +111,8 @@ export class VideoPlayer {
             resolution: null,
             bitrate: null,
             fps: null,
-            codec: null,
+            videoCodec: null,
+            audioCodec: null,
             buffered: null,
             hlsLevel: null,
             hlsLevels: null
@@ -147,8 +148,30 @@ export class VideoPlayer {
                     stats.fps = `${parseFloat(level.attrs['FRAME-RATE']).toFixed(1)} fps`;
                 }
                 
+                // Parse codec information
                 if (level.attrs && level.attrs['CODECS']) {
-                    stats.codec = level.attrs['CODECS'].split(',')[0]; // Show video codec
+                    const codecs = level.attrs['CODECS'].split(',').map(c => c.trim());
+                    
+                    // Separate video and audio codecs
+                    codecs.forEach(codec => {
+                        if (codec.startsWith('avc1')) {
+                            stats.videoCodec = 'H.264';
+                        } else if (codec.startsWith('hev1') || codec.startsWith('hvc1')) {
+                            stats.videoCodec = 'H.265/HEVC ⚠️';
+                        } else if (codec.startsWith('av01')) {
+                            stats.videoCodec = 'AV1';
+                        } else if (codec.startsWith('vp8')) {
+                            stats.videoCodec = 'VP8';
+                        } else if (codec.startsWith('vp9') || codec.startsWith('vp09')) {
+                            stats.videoCodec = 'VP9';
+                        } else if (codec.startsWith('mp4a')) {
+                            stats.audioCodec = 'AAC';
+                        } else if (codec.toLowerCase().includes('opus')) {
+                            stats.audioCodec = 'Opus';
+                        } else if (codec.toLowerCase().includes('mp3')) {
+                            stats.audioCodec = 'MP3';
+                        }
+                    });
                 }
             }
         }
@@ -163,16 +186,23 @@ export class VideoPlayer {
             items.push(`<span class="stat-item"><strong>Resolution:</strong> ${stats.resolution}</span>`);
         }
 
+        // Show video codec (highlight if H.265)
+        if (stats.videoCodec) {
+            const codecClass = stats.videoCodec.includes('H.265') ? 'codec-warning' : '';
+            items.push(`<span class="stat-item ${codecClass}"><strong>Video:</strong> ${stats.videoCodec}</span>`);
+        }
+
+        // Show audio codec if available
+        if (stats.audioCodec) {
+            items.push(`<span class="stat-item"><strong>Audio:</strong> ${stats.audioCodec}</span>`);
+        }
+
         if (stats.bitrate) {
             items.push(`<span class="stat-item"><strong>Bitrate:</strong> ${stats.bitrate}</span>`);
         }
 
         if (stats.fps) {
             items.push(`<span class="stat-item"><strong>FPS:</strong> ${stats.fps}</span>`);
-        }
-
-        if (stats.codec) {
-            items.push(`<span class="stat-item"><strong>Codec:</strong> ${stats.codec}</span>`);
         }
 
         if (stats.hlsLevels && stats.hlsLevel !== null) {
