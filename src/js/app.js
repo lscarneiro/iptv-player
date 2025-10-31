@@ -3,12 +3,15 @@
 import { StorageService } from './services/storageService.js';
 import { ApiService } from './services/apiService.js';
 import { FavoritesService } from './services/favoritesService.js';
+import { EPGService } from './services/epgService.js';
 import { CategoryList } from './components/categoryList.js';
 import { StreamList } from './components/streamList.js';
 import { VideoPlayer } from './components/videoPlayer.js';
 import { UserInfo } from './components/userInfo.js';
 import { SettingsPanel } from './components/settingsPanel.js';
+import { EPGPanel } from './components/epgPanel.js';
 import { MobileNavigation } from './utils/mobileNavigation.js';
+import { TimezoneUtils } from './utils/timezoneUtils.js';
 import { debounce } from './utils/debounce.js';
 import { toggleClearButton } from './utils/domHelpers.js';
 
@@ -17,6 +20,7 @@ export class IPTVApp {
         this.storageService = new StorageService();
         this.apiService = new ApiService(null);
         this.favoritesService = new FavoritesService(this.storageService);
+        this.epgService = new EPGService(this.apiService, this.storageService);
         this.videoPlayer = new VideoPlayer();
         this.mobileNav = new MobileNavigation();
         
@@ -56,6 +60,7 @@ export class IPTVApp {
         this.streamList = new StreamList('streamsContainer');
         this.userInfo = new UserInfo('streamsContainer');
         this.settingsPanel = new SettingsPanel();
+        this.epgPanel = new EPGPanel('epgPanel');
         
         // Setup component callbacks
         this.categoryList.setOnCategorySelect((categoryId) => {
@@ -89,6 +94,14 @@ export class IPTVApp {
         this.settingsPanel.setOnM3u8LoggingChange((enabled) => {
             this.handleM3u8LoggingChange(enabled);
         });
+
+        // Set up EPG panel callbacks
+        this.epgPanel.setOnChannelClick((channelId) => {
+            this.handleEPGChannelClick(channelId);
+        });
+
+        // Set up EPG panel favorites service
+        this.epgPanel.setFavoritesService(this.favoritesService);
     }
 
     setupEventListeners() {
@@ -188,6 +201,48 @@ export class IPTVApp {
         const savedM3u8Logging = this.storageService.loadM3u8Logging();
         this.videoPlayer.setM3u8LoggingEnabled(savedM3u8Logging);
         this.settingsPanel.setM3u8LoggingState(savedM3u8Logging);
+
+        // EPG panel
+        document.getElementById('epgToggle').addEventListener('click', () => {
+            this.openEPGPanel();
+        });
+
+        document.getElementById('epgClose').addEventListener('click', () => {
+            this.closeEPGPanel();
+        });
+
+        document.getElementById('epgRefresh').addEventListener('click', () => {
+            this.refreshEPG();
+        });
+
+        // Timezone selector
+        this.setupTimezoneSelector();
+
+        // EPG channel search with debounce
+        const debouncedEPGSearch = debounce((term) => {
+            this.epgPanel.filter(term);
+        }, 300);
+
+        document.getElementById('epgChannelSearch').addEventListener('input', (e) => {
+            const term = e.target.value;
+            toggleClearButton('clearEpgChannelSearch', term);
+            debouncedEPGSearch(term);
+        });
+
+        // EPG channel search clear button
+        document.getElementById('clearEpgChannelSearch').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const searchBox = document.getElementById('epgChannelSearch');
+            searchBox.value = '';
+            this.epgPanel.filter('');
+            toggleClearButton('clearEpgChannelSearch', '');
+            searchBox.focus();
+        });
+
+        // EPG favorites filter button
+        document.getElementById('epgFavoritesFilter').addEventListener('click', () => {
+            this.epgPanel.filterFavorites();
+        });
     }
 
     // Authentication
@@ -633,6 +688,146 @@ export class IPTVApp {
             setTimeout(() => {
                 this.loadFavoriteStreams();
             }, 100);
+        }
+    }
+
+    // EPG Methods
+    setupTimezoneSelector() {
+        const selector = document.getElementById('timezoneSelector');
+        if (!selector) return;
+
+        const timezones = TimezoneUtils.getTimezoneList();
+        const currentTimezone = TimezoneUtils.getTimezone();
+
+        timezones.forEach(tz => {
+            const option = document.createElement('option');
+            option.value = tz.value;
+            option.textContent = tz.label;
+            if (tz.value === currentTimezone) {
+                option.selected = true;
+            }
+            selector.appendChild(option);
+        });
+
+        selector.addEventListener('change', (e) => {
+            const timezone = e.target.value;
+            TimezoneUtils.setTimezone(timezone);
+            this.epgPanel.setTimezone(timezone);
+            // Re-render EPG with new timezone
+            this.loadEPGData(false);
+        });
+    }
+
+    async openEPGPanel() {
+        const panel = document.getElementById('epgPanel');
+        if (!panel) return;
+
+        panel.classList.add('open');
+        
+        // Load EPG data if not already loaded
+        await this.loadEPGData(false);
+    }
+
+    closeEPGPanel() {
+        const panel = document.getElementById('epgPanel');
+        if (panel) {
+            panel.classList.remove('open');
+        }
+    }
+
+    async loadEPGData(forceRefresh = false) {
+        try {
+            // Get all streams for matching
+            let allStreams = await this.storageService.getFromIndexedDB('streams', 'all_streams');
+            if (!allStreams) {
+                // If no cached streams, we can't match channels
+                this.epgPanel.showError('Please load channels first to enable EPG');
+                return;
+            }
+
+            // Check cache first
+            let epgData = null;
+            if (!forceRefresh) {
+                epgData = await this.epgService.getEPGData();
+                if (epgData && epgData.channels && epgData.channels.length > 0) {
+                    // Render cached data
+                    this.epgPanel.render(epgData.channels, epgData.programmes || {});
+                    this.epgPanel.scrollToCurrentTime();
+                    return;
+                }
+            }
+
+            // Show loading
+            this.epgPanel.showLoading('Loading EPG data...');
+
+            // Set up progress callback
+            this.epgService.setProgressCallback((progress) => {
+                const message = progress.message || 'Loading...';
+                this.epgPanel.showLoading(message);
+            });
+
+            // Fetch and parse EPG
+            epgData = await this.epgService.fetchAndParseEPG(allStreams);
+
+            // Render EPG data
+            if (epgData && epgData.channels) {
+                this.epgPanel.render(epgData.channels, epgData.programmes || {});
+                this.epgPanel.scrollToCurrentTime();
+            } else {
+                this.epgPanel.showError('No EPG data available for your channels');
+            }
+
+        } catch (error) {
+            console.error('EPG load error:', error);
+            this.epgPanel.showError(`Failed to load EPG: ${error.message}`);
+        }
+    }
+
+    async refreshEPG() {
+        await this.loadEPGData(true);
+    }
+
+    async handleEPGChannelClick(channelId) {
+        try {
+            // Find the channel in EPG data
+            const epgData = await this.epgService.getEPGData();
+            if (!epgData || !epgData.channels) {
+                console.error('No EPG data available');
+                return;
+            }
+
+            const channel = epgData.channels.find(c => c.id === channelId);
+            if (!channel) {
+                console.error('Channel not found:', channelId);
+                return;
+            }
+
+            // Get stream info from channel
+            const streamId = channel.streamId;
+            const categoryId = channel.categoryId;
+            const streamName = channel.streamName || channel.displayName;
+
+            if (!streamId) {
+                console.error('No stream ID for channel:', channelId);
+                return;
+            }
+
+            // Close EPG panel
+            this.closeEPGPanel();
+
+            // Select category if we have one
+            if (categoryId && this.categories.find(c => c.category_id === categoryId)) {
+                await this.handleCategorySelect(categoryId);
+                // Small delay to ensure streams are loaded
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            // Load and play the stream
+            await this.handleWatchStream(streamId, streamName);
+
+        } catch (error) {
+            console.error('EPG channel click error:', error);
+            alert(`Failed to load channel: ${error.message}`);
         }
     }
 

@@ -7,7 +7,7 @@ export class StorageService {
 
     async init() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open('IPTVPlayerDB', 2); // Increment version to trigger upgrade
+            const request = indexedDB.open('IPTVPlayerDB', 3); // Increment version to trigger upgrade
             
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
@@ -41,6 +41,12 @@ export class StorageService {
                 if (!db.objectStoreNames.contains('favorites')) {
                     db.createObjectStore('favorites', { keyPath: 'key' });
                     console.log('Created favorites store');
+                }
+                
+                // EPG store
+                if (!db.objectStoreNames.contains('epg')) {
+                    db.createObjectStore('epg', { keyPath: 'key' });
+                    console.log('Created epg store');
                 }
                 
                 console.log('Available stores:', Array.from(db.objectStoreNames));
@@ -157,6 +163,43 @@ export class StorageService {
     loadM3u8Logging() {
         const saved = localStorage.getItem('enableM3u8Logging');
         return saved !== null ? saved === 'true' : false; // Default to false
+    }
+
+    // EPG data management
+    async saveEPGData(channels, programmes) {
+        const epgData = {
+            channels,
+            programmes,
+            lastUpdated: Date.now()
+        };
+        return await this.saveToIndexedDB('epg', 'epg_data', epgData);
+    }
+
+    async getEPGData() {
+        return await this.getFromIndexedDB('epg', 'epg_data');
+    }
+
+    async clearEPGData() {
+        if (!this.db) {
+            console.warn('IndexedDB not available, skipping EPG cache clear');
+            return Promise.resolve();
+        }
+        return new Promise((resolve, reject) => {
+            try {
+                const transaction = this.db.transaction(['epg'], 'readwrite');
+                const store = transaction.objectStore('epg');
+                const request = store.clear();
+                
+                request.onsuccess = () => resolve();
+                request.onerror = () => {
+                    console.error('Failed to clear EPG data:', request.error);
+                    reject(request.error);
+                };
+            } catch (error) {
+                console.error('Error clearing EPG data:', error);
+                reject(error);
+            }
+        });
     }
 }
 

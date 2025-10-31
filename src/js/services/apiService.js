@@ -40,6 +40,19 @@ export class ApiService {
         }
     }
 
+    async fetchXml(url) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return await response.text();
+        } catch (error) {
+            console.error('XML fetch error:', error);
+            throw error;
+        }
+    }
+
     async getUserInfo() {
         const url = this.buildApiUrl();
         return await this.fetchApi(url);
@@ -90,6 +103,16 @@ export class ApiService {
         const manualUrl = `${this.credentials.serverUrl}/live/${this.credentials.username}/${this.credentials.password}/${streamId}.m3u8`;
         console.log('Trying manual URL construction:', manualUrl);
         return manualUrl;
+    }
+
+    async getEPGXml() {
+        if (!this.credentials) throw new Error('No credentials available');
+        
+        const url = new URL(`${this.credentials.serverUrl}/xmltv.php`);
+        url.searchParams.set('username', this.credentials.username);
+        url.searchParams.set('password', this.credentials.password);
+        
+        return await this.fetchXml(url.toString());
     }
 }
 

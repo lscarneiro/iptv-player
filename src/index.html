@@ -24,6 +24,7 @@
     <div class="header">
         <h1>IPTV Player</h1>
         <div class="header-buttons">
+            <button class="header-btn" id="epgToggle">EPG</button>
             <button class="header-btn" id="accountToggle">Account</button>
             <button class="settings-toggle" id="settingsToggle">Settings</button>
         </div>
@@ -68,6 +69,32 @@
             </div>
             <div id="accountContent">
                 <div class="loading">Loading account information...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- EPG Panel -->
+    <div class="epg-panel" id="epgPanel">
+        <div class="epg-header">
+            <div class="epg-title">Electronic Program Guide</div>
+            <div class="epg-search-controls">
+                <div class="search-input-container">
+                    <input type="text" class="search-box" id="epgChannelSearch" placeholder="Search channels...">
+                    <button class="clear-btn hidden" id="clearEpgChannelSearch" title="Clear search">×</button>
+                </div>
+                <button class="epg-favorites-btn" id="epgFavoritesFilter" title="Show only favorites">⭐</button>
+            </div>
+            <div class="epg-controls">
+                <select id="timezoneSelector" class="epg-timezone-select"></select>
+                <button class="refresh-btn" id="epgRefresh" title="Refresh EPG">↻ Refresh</button>
+                <button class="epg-close" id="epgClose">&times;</button>
+            </div>
+        </div>
+        <div class="epg-content">
+            <div class="epg-time-header" id="epgTimeHeader"></div>
+            <div class="epg-grid-container">
+                <div class="epg-channels-column" id="epgChannelsColumn"></div>
+                <div class="epg-programmes-area" id="epgProgrammesArea"></div>
             </div>
         </div>
     </div>
