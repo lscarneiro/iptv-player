@@ -425,13 +425,13 @@ body {
 .stream-epg-container {
     flex: 0 0 auto;
     min-height: 200px;
-    max-height: 40vh;
+    max-height: 20vh;
     display: flex;
     flex-direction: column;
     padding: 0;
     background-color: #2d2d2d;
     border-top: 1px solid #404040;
-    overflow: hidden;
+    overflow: overlay;
 }
 
 .stream-epg-header {
@@ -598,7 +598,7 @@ body {
 
     .stream-epg-container {
         min-height: 180px;
-        max-height: 35vh;
+        max-height: 20vh;
     }
 
     .stream-epg-header {
