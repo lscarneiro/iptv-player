@@ -245,5 +245,139 @@ export class EPGService {
             stream.epg_channel_id.trim() === channelId.trim()
         );
     }
+
+    /**
+     * Decode Base64 string safely
+     */
+    decodeBase64(str) {
+        if (!str) return '';
+        
+        try {
+            // Check if string looks like Base64 (contains only valid Base64 characters)
+            if (/^[A-Za-z0-9+/]+=*$/.test(str)) {
+                return atob(str);
+            }
+            // Not Base64, return as-is
+            return str;
+        } catch (error) {
+            logger.warn('Failed to decode Base64 string:', str, error);
+            return str; // Return original if decoding fails
+        }
+    }
+
+    /**
+     * Process stream EPG data from get_simple_data_table API
+     * Returns formatted programs with current program highlighted
+     */
+    processStreamEPG(epgData) {
+        if (!epgData || !epgData.epg_listings || epgData.epg_listings.length === 0) {
+            return null;
+        }
+
+        const now = Date.now();
+        const programmes = [];
+
+        // Process each EPG listing
+        for (const listing of epgData.epg_listings) {
+            try {
+                // Parse the timestamps - prioritize start_timestamp/stop_timestamp fields
+                let startDate, stopDate;
+                
+                if (listing.start_timestamp && listing.stop_timestamp) {
+                    // Use the timestamp fields (Unix timestamp as string)
+                    startDate = new Date(parseInt(listing.start_timestamp) * 1000);
+                    stopDate = new Date(parseInt(listing.stop_timestamp) * 1000);
+                } else if (listing.start && listing.end) {
+                    // Fallback to start/end fields
+                    if (typeof listing.start === 'string' && /^\d+$/.test(listing.start)) {
+                        // Unix timestamp in seconds
+                        startDate = new Date(parseInt(listing.start) * 1000);
+                        stopDate = new Date(parseInt(listing.end || listing.stop) * 1000);
+                    } else if (typeof listing.start === 'number') {
+                        // Unix timestamp in seconds
+                        startDate = new Date(listing.start * 1000);
+                        stopDate = new Date((listing.end || listing.stop) * 1000);
+                    } else {
+                        // Try parsing as datetime string
+                        startDate = new Date(listing.start);
+                        stopDate = new Date(listing.end || listing.stop);
+                    }
+                } else {
+                    logger.warn('No valid timestamp fields in listing:', listing);
+                    continue;
+                }
+
+                // Validate dates
+                if (isNaN(startDate.getTime()) || isNaN(stopDate.getTime())) {
+                    logger.warn('Invalid dates in listing:', listing);
+                    continue;
+                }
+
+                // Decode Base64 encoded title and description
+                const title = this.decodeBase64(listing.title) || 'Untitled';
+                const description = this.decodeBase64(listing.description || listing.desc || '');
+
+                // Check if currently playing (use now_playing field if available)
+                const isCurrent = listing.now_playing === 1 || 
+                                (now >= startDate.getTime() && now < stopDate.getTime());
+
+                const programme = {
+                    title: title,
+                    description: description,
+                    start: startDate,
+                    stop: stopDate,
+                    startTime: startDate.getTime(),
+                    stopTime: stopDate.getTime(),
+                    isCurrent: isCurrent
+                };
+
+                programmes.push(programme);
+            } catch (error) {
+                logger.warn('Failed to parse stream EPG listing:', listing, error);
+                continue;
+            }
+        }
+
+        // Sort by start time
+        programmes.sort((a, b) => a.startTime - b.startTime);
+
+        // Find the current program index (in case now_playing wasn't set)
+        const currentIndex = programmes.findIndex(p => p.isCurrent);
+
+        return {
+            programmes,
+            currentIndex,
+            hasData: programmes.length > 0
+        };
+    }
+
+    /**
+     * Get nearest programs for display (current + next few)
+     */
+    getNearestProgrammes(epgData, count = 5) {
+        const processed = this.processStreamEPG(epgData);
+        
+        if (!processed || !processed.hasData) {
+            return null;
+        }
+
+        const { programmes, currentIndex } = processed;
+        
+        if (currentIndex >= 0) {
+            // Return current program + next programs
+            return programmes.slice(currentIndex, currentIndex + count);
+        } else {
+            // No current program, find the next upcoming program
+            const now = Date.now();
+            const nextIndex = programmes.findIndex(p => p.startTime > now);
+            
+            if (nextIndex >= 0) {
+                return programmes.slice(nextIndex, nextIndex + count);
+            } else {
+                // All programs are in the past, return last few
+                return programmes.slice(-count);
+            }
+        }
+    }
 }
 
