@@ -106,8 +106,9 @@ export class SeriesApp {
         const seriesSearchBox = document.getElementById('seriesSearch');
         if (seriesSearchBox) {
             seriesSearchBox.addEventListener('input', (e) => {
-                toggleClearButton(e.target, 'clearSeriesSearch');
-                debouncedSeriesSearch(e.target.value);
+                const term = e.target.value;
+                toggleClearButton('clearSeriesSearch', term);
+                debouncedSeriesSearch(term);
             });
         }
 
@@ -129,8 +130,9 @@ export class SeriesApp {
         const categorySearchBox = document.getElementById('seriesCategorySearch');
         if (categorySearchBox) {
             categorySearchBox.addEventListener('input', (e) => {
-                toggleClearButton(e.target, 'clearSeriesCategorySearch');
-                debouncedCategorySearch(e.target.value);
+                const term = e.target.value;
+                toggleClearButton('clearSeriesCategorySearch', term);
+                debouncedCategorySearch(term);
             });
         }
 
@@ -244,7 +246,7 @@ export class SeriesApp {
         const searchBox = document.getElementById('seriesSearch');
         if (searchBox) {
             searchBox.value = '';
-            toggleClearButton(searchBox, 'clearSeriesSearch');
+            toggleClearButton('clearSeriesSearch', '');
         }
         
         // Reset series list search state
@@ -341,22 +343,89 @@ export class SeriesApp {
 
     async handlePlayEpisode(episodeId, episodeTitle, extension) {
         try {
-            logger.log(`Playing episode ${episodeId}: ${episodeTitle}`);
+            logger.log(`Playing episode ${episodeId}: ${episodeTitle} (${extension})`);
+            
+            // Show loading in video panel
+            this.videoPlayer.showLoading('Loading episode...');
             
             // Get episode stream URL
             const streamUrl = await this.apiService.getEpisodeStreamUrl(episodeId, extension);
             logger.log('Episode stream URL:', streamUrl);
             
-            // Play using video player
-            await this.videoPlayer.playStream(streamUrl, episodeTitle, episodeId, 'episode');
+            if (!streamUrl || typeof streamUrl !== 'string') {
+                logger.error('Invalid episode URL:', streamUrl);
+                throw new Error('No valid episode URL found');
+            }
+            
+            // Check if it's an MKV file - use direct video playback
+            if (streamUrl.toLowerCase().includes('.mkv') || extension === 'mkv') {
+                logger.log('MKV file detected, using direct video playback');
+                this.playDirectVideo(streamUrl, episodeTitle, episodeId);
+            } else {
+                // Play using HLS video player
+                this.videoPlayer.playStream(streamUrl, episodeTitle, episodeId);
+            }
             
             // Hide series detail panel when playing
             this.seriesInfoPanel.hide();
             
         } catch (error) {
             logger.error('Failed to play episode:', error);
-            alert('Failed to play episode. Please try again.');
+            this.videoPlayer.showError(`Error: ${error.message}`);
         }
+    }
+
+    playDirectVideo(videoUrl, title, episodeId) {
+        // For MKV and other direct video files, use native HTML5 video player
+        const videoPanel = document.getElementById('videoPanel');
+        const videoLarge = document.getElementById('videoPlayerLarge');
+        const videoPanelTitle = document.getElementById('videoPanelTitle');
+        const fallbackLinkLarge = document.getElementById('fallbackLinkLarge');
+        const fallbackUrlLarge = document.getElementById('fallbackUrlLarge');
+        const videoInfoDetails = document.getElementById('videoInfoDetails');
+        
+        // Cleanup any existing HLS player
+        if (this.videoPlayer.hlsPlayer) {
+            this.videoPlayer.hlsPlayer.destroy();
+            this.videoPlayer.hlsPlayer = null;
+        }
+        
+        // Update UI
+        videoPanelTitle.textContent = title;
+        videoInfoDetails.innerHTML = '<span class="stat-item">Direct video playback (MKV)</span>';
+        fallbackUrlLarge.href = videoUrl;
+        fallbackUrlLarge.textContent = videoUrl;
+        fallbackLinkLarge.style.display = 'block';
+        
+        // Show video panel
+        videoPanel.style.display = 'flex';
+        
+        // Clear any errors
+        const videoPanelError = document.getElementById('videoPanelError');
+        if (videoPanelError) {
+            videoPanelError.style.display = 'none';
+        }
+        
+        // Set video source directly
+        videoLarge.src = videoUrl;
+        videoLarge.load();
+        
+        // Try to play
+        const playPromise = videoLarge.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                logger.error('Video play error:', error);
+                if (error.name === 'NotSupportedError') {
+                    this.videoPlayer.showError('This video format (MKV) may not be supported by your browser. Please try using the direct link with VLC or another media player.');
+                } else if (error.name === 'NotAllowedError') {
+                    logger.log('Autoplay blocked - user interaction required');
+                } else {
+                    this.videoPlayer.showError(`Playback error: ${error.message}. Try using the direct link.`);
+                }
+            });
+        }
+        
+        logger.log('Direct video playback started for:', videoUrl);
     }
 
     handleSeriesFavoriteToggle(seriesId, isFavorite) {
@@ -402,7 +471,7 @@ export class SeriesApp {
     }
 
     // Show the series view
-    show() {
+    async show() {
         const seriesContainer = document.getElementById('seriesContainer');
         if (seriesContainer) {
             seriesContainer.style.display = 'flex';
@@ -410,7 +479,19 @@ export class SeriesApp {
         
         // Initialize if not already done
         if (!this.initialized) {
-            this.init();
+            await this.init();
+        } else {
+            // If already initialized, ensure "All Series" is selected
+            this.categoryList.selectCategory('all');
+            this.currentCategory = 'all';
+            this.currentCategoryName = 'All Series';
+            await this.loadSeries(false);
+            
+            // Show right panel header
+            const rightPanelHeader = document.querySelector('.series-right-panel .panel-header');
+            if (rightPanelHeader) {
+                rightPanelHeader.classList.remove('hidden');
+            }
         }
     }
 
