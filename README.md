@@ -10,20 +10,25 @@ src/
 │   ├── app.js                    # Main application orchestrator
 │   ├── services/
 │   │   ├── apiService.js         # API communication service
+│   │   ├── epgService.js         # EPG data fetching, parsing, and storage
+│   │   ├── favoritesService.js   # Favorite streams management
 │   │   └── storageService.js     # IndexedDB and localStorage management
 │   ├── components/
+│   │   ├── bufferingManager.js   # Buffering detection and recovery
 │   │   ├── categoryList.js       # Category list UI component
-│   │   ├── streamList.js         # Stream list UI component
-│   │   ├── videoPlayer.js        # Video player component
-│   │   ├── userInfo.js           # User information display component
-│   │   ├── settingsPanel.js      # Settings panel component
+│   │   ├── epgPanel.js           # TV guide grid display component
 │   │   ├── errorHandler.js       # Error handling and UI management
 │   │   ├── retryManager.js       # Retry logic with exponential backoff
-│   │   └── bufferingManager.js   # Buffering detection and recovery
+│   │   ├── settingsPanel.js      # Settings panel component
+│   │   ├── streamList.js         # Stream list UI component
+│   │   ├── userInfo.js           # User information display component
+│   │   └── videoPlayer.js        # Video player component
 │   └── utils/
 │       ├── debounce.js           # Debounce utility
 │       ├── domHelpers.js         # DOM manipulation utilities
-│       └── mobileNavigation.js   # Mobile navigation and view management
+│       ├── logger.js             # Logger utility with configurable log levels
+│       ├── mobileNavigation.js   # Mobile navigation and view management
+│       └── timezoneUtils.js      # Timezone detection and EPG timestamp conversion
 ├── index.html                     # Main HTML file
 ├── index.css                      # Styles
 ├── manifest.json                  # PWA manifest
