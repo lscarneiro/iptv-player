@@ -37,17 +37,31 @@
                 <button class="settings-close" id="settingsClose">&times;</button>
             </div>
             <form id="loginForm" name="loginForm" action="#">
-                <div class="form-group">
-                    <label for="serverUrl">Server URL</label>
-                    <input type="url" id="serverUrl" name="serverUrl" placeholder="http://your-server.com" autocomplete="url" required>
+                <div class="form-group button-group" id="logoutButtonGroup" style="display: none;">
+                    <button type="button" id="logoutBtn" class="btn btn-danger">Log Out</button>
+                </div>
+                <div id="loginInputs">
+                    <div class="form-group">
+                        <label for="serverUrl">Server URL</label>
+                        <input type="url" id="serverUrl" name="serverUrl" placeholder="http://your-server.com" autocomplete="url" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username" placeholder="Your username" autocomplete="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" placeholder="Your password" autocomplete="current-password" required>
+                    </div>
+                    <div class="form-group button-group">
+                        <button type="submit" id="connectBtn" class="btn">Connect</button>
+                    </div>
                 </div>
                 <div class="form-group">
-                    <label for="username">Username</label>
-                    <input type="text" id="username" name="username" placeholder="Your username" autocomplete="username" required>
-                </div>
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" placeholder="Your password" autocomplete="current-password" required>
+                    <label for="jsonLoginString">Connection String</label>
+                    <textarea id="jsonLoginString" name="jsonLoginString" placeholder='{"serverUrl":"http://your-server.com","username":"user","password":"pass"}' rows="3"></textarea>
+                    <small>Paste a JSON string with serverUrl, username, and password to login quickly</small>
+                    <button type="button" id="quickLoginBtn" class="btn btn-secondary">Connect</button>
                 </div>
                 <div class="form-group">
                     <label class="checkbox-label">
@@ -74,7 +88,6 @@
                         </label>
                     </div>
                 </div>
-                <button type="submit" class="btn">Connect</button>
             </form>
         </div>
     </div>

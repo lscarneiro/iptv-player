@@ -145,7 +145,8 @@ body {
     font-weight: 500;
 }
 
-.form-group input {
+.form-group input,
+.form-group textarea {
     width: 100%;
     padding: 0.75rem;
     background-color: #404040;
@@ -153,9 +154,16 @@ body {
     border-radius: 4px;
     color: white;
     font-size: 1rem;
+    font-family: inherit;
 }
 
-.form-group input:focus {
+.form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
     outline: none;
     border-color: #007acc;
 }
@@ -218,6 +226,24 @@ body {
 
 .btn-secondary:hover {
     background-color: #505050;
+}
+
+.btn-danger {
+    background-color: #c9302c;
+}
+
+.btn-danger:hover {
+    background-color: #a02623;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    flex-direction: column;
+}
+
+.button-group .btn {
+    width: 100%;
 }
 
 .main-container {

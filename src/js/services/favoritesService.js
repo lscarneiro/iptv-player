@@ -132,4 +132,9 @@ export class FavoritesService {
             this.onFavoriteChange(null, false); // Signal all favorites cleared
         }
     }
+
+    // Clear favorites (alias for clearAllFavorites, for consistency)
+    async clear() {
+        await this.clearAllFavorites();
+    }
 }

@@ -96,6 +96,16 @@ export class StreamList {
         this.isLoading = false;
     }
 
+    clear() {
+        this.container.innerHTML = '';
+        this.allStreams = [];
+        this.filteredStreams = [];
+        this.visibleStreams = 30;
+        this.currentPlayingStreamId = null;
+        this.currentSearchTerm = '';
+        this.isLoading = false;
+    }
+
     // Cleanup method
     destroy() {
         this.isDestroyed = true;

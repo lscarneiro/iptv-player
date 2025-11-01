@@ -6,6 +6,8 @@ export class SettingsPanel {
         this.onSubmit = null;
         this.onM3u8LoggingChange = null;
         this.onConsoleLogLevelChange = null;
+        this.onQuickLogin = null;
+        this.onLogout = null;
     }
 
     setOnSubmit(callback) {
@@ -18,6 +20,14 @@ export class SettingsPanel {
 
     setOnConsoleLogLevelChange(callback) {
         this.onConsoleLogLevelChange = callback;
+    }
+
+    setOnQuickLogin(callback) {
+        this.onQuickLogin = callback;
+    }
+
+    setOnLogout(callback) {
+        this.onLogout = callback;
     }
 
     setupEventListeners() {
@@ -61,6 +71,21 @@ export class SettingsPanel {
                 this.onConsoleLogLevelChange('error', e.target.checked);
             }
         });
+
+        // Quick login button
+        document.getElementById('quickLoginBtn').addEventListener('click', () => {
+            if (this.onQuickLogin) {
+                const jsonString = document.getElementById('jsonLoginString').value.trim();
+                this.onQuickLogin(jsonString);
+            }
+        });
+
+        // Logout button
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            if (this.onLogout) {
+                this.onLogout();
+            }
+        });
     }
 
     open() {
@@ -70,7 +95,39 @@ export class SettingsPanel {
             accountPanel.classList.remove('open');
         }
         
+        // Update button visibility based on stored credentials
+        this.updateButtonVisibility();
+        
         this.panel.classList.add('open');
+    }
+
+    updateButtonVisibility() {
+        const connectBtn = document.getElementById('connectBtn');
+        const logoutButtonGroup = document.getElementById('logoutButtonGroup');
+        const loginInputs = document.getElementById('loginInputs');
+        const connectionStringGroup = document.getElementById('jsonLoginString')?.closest('.form-group');
+        
+        // Check if credentials are stored
+        const hasCredentials = localStorage.getItem('iptv_credentials') !== null;
+        
+        if (connectBtn) {
+            connectBtn.style.display = hasCredentials ? 'none' : 'block';
+        }
+        
+        // Show/hide logout button group at the top
+        if (logoutButtonGroup) {
+            logoutButtonGroup.style.display = hasCredentials ? 'block' : 'none';
+        }
+        
+        // Hide/show login input fields based on credentials
+        if (loginInputs) {
+            loginInputs.style.display = hasCredentials ? 'none' : 'block';
+        }
+        
+        // Hide/show connection string input based on credentials
+        if (connectionStringGroup) {
+            connectionStringGroup.style.display = hasCredentials ? 'none' : 'block';
+        }
     }
 
     close() {

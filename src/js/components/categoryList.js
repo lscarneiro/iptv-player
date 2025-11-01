@@ -114,6 +114,11 @@ export class CategoryList {
         this.container.innerHTML = `<div class="error">${message}</div>`;
     }
 
+    clear() {
+        this.container.innerHTML = '';
+        this.currentCategory = null;
+    }
+
     filter(searchTerm) {
         const items = this.container.querySelectorAll('.category-item');
         const groups = this.container.querySelectorAll('.category-group');

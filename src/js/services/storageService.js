@@ -115,7 +115,7 @@ export class StorageService {
             return Promise.resolve();
         }
         return new Promise((resolve, reject) => {
-            const stores = ['categories', 'streams', 'userInfo', 'favorites'];
+            const stores = ['categories', 'streams', 'userInfo', 'favorites', 'epg'];
             const transaction = this.db.transaction(stores, 'readwrite');
             
             let completed = 0;
@@ -147,6 +147,28 @@ export class StorageService {
 
     clearCredentials() {
         localStorage.removeItem('iptv_credentials');
+    }
+
+    // Clear all stored data (logout)
+    async clearAllData() {
+        try {
+            // Clear IndexedDB (including EPG)
+            await this.clearIndexedDB();
+            await this.clearEPGData();
+            
+            // Clear all localStorage items
+            localStorage.removeItem('iptv_credentials');
+            localStorage.removeItem('filterMarkers');
+            localStorage.removeItem('enableM3u8Logging');
+            localStorage.removeItem('consoleLogLevels');
+            localStorage.removeItem('favorite_streams');
+            localStorage.removeItem('epg_timezone');
+            
+            logger.log('All data cleared successfully');
+        } catch (error) {
+            logger.error('Error clearing all data:', error);
+            throw error;
+        }
     }
 
     saveFilterMarkers(value) {

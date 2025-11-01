@@ -53,6 +53,9 @@ export class IPTVApp {
         this.setupComponents();
         this.setupEventListeners();
         this.checkSavedCredentials();
+        
+        // Set initial button visibility
+        this.settingsPanel.updateButtonVisibility();
     }
 
     setupComponents() {
@@ -100,6 +103,14 @@ export class IPTVApp {
 
         this.settingsPanel.setOnConsoleLogLevelChange((level, enabled) => {
             this.handleConsoleLogLevelChange(level, enabled);
+        });
+
+        this.settingsPanel.setOnQuickLogin((jsonString) => {
+            this.handleQuickLogin(jsonString);
+        });
+
+        this.settingsPanel.setOnLogout(() => {
+            this.handleLogout();
         });
 
         // Set up EPG panel callbacks
@@ -305,9 +316,14 @@ export class IPTVApp {
             // Close settings panel
             this.settingsPanel.close();
             
+            // Update button visibility after successful login
+            this.settingsPanel.updateButtonVisibility();
+            
         } catch (error) {
             alert(`Login failed: ${error.message}`);
             this.storageService.clearCredentials();
+            // Update button visibility after failed login
+            this.settingsPanel.updateButtonVisibility();
         }
     }
 
@@ -323,6 +339,91 @@ export class IPTVApp {
         logger.setEnabledLevels(currentLevels);
         this.storageService.saveConsoleLogLevels(currentLevels);
         logger.log(`Console ${level} logging ${enabled ? 'enabled' : 'disabled'}`);
+    }
+
+    // Quick login from JSON string
+    async handleQuickLogin(jsonString) {
+        if (!jsonString || !jsonString.trim()) {
+            alert('Please enter a JSON string');
+            return;
+        }
+
+        try {
+            // Parse JSON string
+            const credentials = JSON.parse(jsonString);
+            
+            // Validate required fields
+            if (!credentials.serverUrl || !credentials.username || !credentials.password) {
+                alert('JSON string must contain serverUrl, username, and password');
+                return;
+            }
+
+            // Clear JSON input
+            document.getElementById('jsonLoginString').value = '';
+
+            // Use existing login handler (it will update button visibility)
+            await this.handleLogin(credentials.serverUrl, credentials.username, credentials.password);
+        } catch (error) {
+            if (error instanceof SyntaxError) {
+                alert('Invalid JSON string. Please check the format.');
+            } else {
+                alert(`Login failed: ${error.message}`);
+            }
+        }
+    }
+
+    // Logout - clear all data and reset UI
+    async handleLogout() {
+        if (!confirm('Are you sure you want to log out? This will clear all stored data.')) {
+            return;
+        }
+
+        try {
+            // Close any open panels
+            this.settingsPanel.close();
+            this.userInfo.closeAccountPanel();
+            this.closeEPGPanel();
+            this.videoPlayer.closePlayer();
+            this.videoPlayer.closeVideoPanel();
+
+            // Clear all stored data
+            await this.storageService.clearAllData();
+            
+            // Clear favorites service
+            await this.favoritesService.clear();
+
+            // Reset API service credentials
+            this.apiService.setCredentials(null);
+
+            // Clear form fields
+            this.settingsPanel.populateForm('', '', '');
+            document.getElementById('jsonLoginString').value = '';
+
+            // Hide main interface
+            document.getElementById('mainContainer').style.display = 'none';
+            document.getElementById('mobileNav').style.display = 'none';
+
+            // Reset app state
+            this.categories = [];
+            this.currentCategory = null;
+            this.currentCategoryName = 'All Channels';
+            this.currentCategoryLoadId = 0;
+            this.currentStreamLoadId = 0;
+            this.currentFilterId = 0;
+
+            // Clear UI components
+            this.categoryList.clear();
+            this.streamList.clear();
+            this.userInfo.clear();
+
+            logger.log('Logged out successfully');
+            
+            // Update button visibility after logout
+            this.settingsPanel.updateButtonVisibility();
+        } catch (error) {
+            logger.error('Logout error:', error);
+            alert(`Logout failed: ${error.message}`);
+        }
     }
 
     checkSavedCredentials() {
