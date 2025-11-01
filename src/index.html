@@ -24,6 +24,7 @@
     <div class="header">
         <h1>IPTV Player</h1>
         <div class="header-buttons">
+            <button class="header-btn" id="seriesToggle">Series</button>
             <button class="header-btn" id="epgToggle">EPG</button>
             <button class="header-btn" id="accountToggle">Account</button>
             <button class="settings-toggle" id="settingsToggle">Settings</button>
@@ -136,6 +137,46 @@
             <button class="mobile-nav-btn" id="mobileNavLeft" title="Previous">‹</button>
             <div class="mobile-nav-title" id="mobileNavTitle">Categories</div>
             <button class="mobile-nav-btn" id="mobileNavRight" title="Next">›</button>
+        </div>
+    </div>
+
+    <!-- Series Container -->
+    <div class="series-container" id="seriesContainer" style="display: none;">
+        <div class="series-left-panel active" id="seriesLeftPanel">
+            <div class="panel-header">
+                <div class="panel-title">Series Categories</div>
+                <div class="search-controls">
+                    <div class="search-input-container">
+                        <input type="text" class="search-box" id="seriesCategorySearch" placeholder="Search categories...">
+                        <button class="clear-btn hidden" id="clearSeriesCategorySearch" title="Clear search">×</button>
+                    </div>
+                    <button class="refresh-btn" id="refreshSeriesCategories" title="Refresh Categories">↻</button>
+                </div>
+            </div>
+            <div class="content-area" id="seriesCategoriesContainer">
+                <div class="loading">Loading categories...</div>
+            </div>
+        </div>
+
+        <div class="series-right-panel" id="seriesRightPanel">
+            <div class="panel-header hidden">
+                <div class="panel-title">Series</div>
+                <div class="search-controls">
+                    <div class="search-input-container">
+                        <input type="text" class="search-box" id="seriesSearch" placeholder="Search series...">
+                        <button class="clear-btn hidden" id="clearSeriesSearch" title="Clear search">×</button>
+                    </div>
+                    <button class="refresh-btn" id="refreshSeriesList" title="Refresh Series">↻</button>
+                </div>
+            </div>
+            <div class="content-area" id="seriesListContainer">
+                <div class="loading">Select a category to view series</div>
+            </div>
+        </div>
+
+        <!-- Series Detail Panel (overlay) -->
+        <div class="series-detail-panel" id="seriesDetailPanel" style="display: none;">
+            <div class="loading">Loading series information...</div>
         </div>
     </div>
 
