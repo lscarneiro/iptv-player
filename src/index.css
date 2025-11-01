@@ -3232,3 +3232,37 @@ body.video-fullscreen .video-player-large {
     padding: 1rem;
     text-align: center;
 }
+
+/* Series Video Panel Styles */
+
+.series-container.watching-video {
+    /* When watching video in series view, adjust layout */
+}
+
+.series-container.watching-video .series-left-panel,
+.series-container.watching-video .series-right-panel {
+    display: none;
+}
+
+.series-container.watching-video .series-detail-panel {
+    display: none;
+}
+
+.series-container #seriesVideoPanel {
+    /* Video panel takes full container when playing */
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+}
+
+/* Ensure series video panel has same styles as live video panel */
+#seriesVideoPanel .video-panel-header,
+#seriesVideoPanel .video-panel-info-bar,
+#seriesVideoPanel .video-panel-content,
+#seriesVideoPanel .video-container-large {
+    /* Inherits styles from .video-panel */
+}
+

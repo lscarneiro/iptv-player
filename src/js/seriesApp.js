@@ -3,16 +3,23 @@
 import { SeriesCategoryList } from './components/seriesCategoryList.js';
 import { SeriesList } from './components/seriesList.js';
 import { SeriesInfoPanel } from './components/seriesInfoPanel.js';
+import { VideoPlayer } from './components/videoPlayer.js';
 import { debounce } from './utils/debounce.js';
 import { toggleClearButton } from './utils/domHelpers.js';
 import { logger } from './utils/logger.js';
 
 export class SeriesApp {
-    constructor(apiService, storageService, favoritesService, videoPlayer) {
+    constructor(apiService, storageService, favoritesService) {
         this.apiService = apiService;
         this.storageService = storageService;
         this.favoritesService = favoritesService;
-        this.videoPlayer = videoPlayer;
+        
+        // Create separate VideoPlayer instance for series
+        this.seriesVideoPlayer = new VideoPlayer();
+        this.seriesVideoPlayer.setApiService(apiService);
+        
+        // Override video player IDs to use series-specific elements
+        this.initializeSeriesVideoPlayer();
         
         this.categories = [];
         this.currentCategory = null;
@@ -24,6 +31,21 @@ export class SeriesApp {
         this.currentSeriesLoadId = 0;
         
         this.initialized = false;
+    }
+
+    initializeSeriesVideoPlayer() {
+        // Configure the series video player to use series-specific DOM elements
+        // This prevents conflicts with the live TV video player
+        this.seriesVideoElementIds = {
+            videoPanel: 'seriesVideoPanel',
+            videoPlayer: 'seriesVideoPlayerLarge',
+            videoPanelTitle: 'seriesVideoPanelTitle',
+            videoInfoDetails: 'seriesVideoInfoDetails',
+            fallbackLinkLarge: 'seriesFallbackLinkLarge',
+            fallbackUrlLarge: 'seriesFallbackUrlLarge',
+            videoPanelError: 'seriesVideoPanelError',
+            videoFavoriteStar: 'seriesVideoFavoriteStar'
+        };
     }
 
     async init() {
@@ -80,6 +102,14 @@ export class SeriesApp {
         this.favoritesService.setOnSeriesFavoriteChange((seriesId, isFavorite) => {
             this.handleSeriesFavoriteChange(seriesId, isFavorite);
         });
+
+        // Set up series video panel close button
+        const closeSeriesVideoBtn = document.getElementById('closeSeriesVideoPanel');
+        if (closeSeriesVideoBtn) {
+            closeSeriesVideoBtn.addEventListener('click', () => {
+                this.closeSeriesVideo();
+            });
+        }
     }
 
     setupEventListeners() {
@@ -345,21 +375,6 @@ export class SeriesApp {
         try {
             logger.log(`Playing episode ${episodeId}: ${episodeTitle} (${extension})`);
             
-            // Hide series container and show main container for video playback
-            const seriesContainer = document.getElementById('seriesContainer');
-            const mainContainer = document.getElementById('mainContainer');
-            
-            if (seriesContainer) {
-                seriesContainer.style.display = 'none';
-            }
-            if (mainContainer) {
-                mainContainer.style.display = 'flex';
-                mainContainer.classList.add('watching');
-            }
-            
-            // Show loading in video panel
-            this.videoPlayer.showLoading('Loading episode...');
-            
             // Get episode stream URL
             const streamUrl = await this.apiService.getEpisodeStreamUrl(episodeId, extension);
             logger.log('Episode stream URL:', streamUrl);
@@ -369,85 +384,160 @@ export class SeriesApp {
                 throw new Error('No valid episode URL found');
             }
             
-            // Check if it's an MKV file - use direct video playback
-            if (streamUrl.toLowerCase().includes('.mkv') || extension === 'mkv') {
-                logger.log('MKV file detected, using direct video playback');
-                this.playDirectVideo(streamUrl, episodeTitle, episodeId);
-            } else {
-                // Play using HLS video player
-                this.videoPlayer.playStream(streamUrl, episodeTitle, episodeId);
-            }
-            
-            // Hide series detail panel when playing
+            // Show series video panel and hide detail panel
+            this.showSeriesVideoPanel();
             this.seriesInfoPanel.hide();
+            
+            // Always use direct video playback for episodes (MKV, MP4, etc.)
+            // Most series episodes are MKV files that need direct playback
+            this.playEpisodeDirectly(streamUrl, episodeTitle, episodeId, extension);
             
         } catch (error) {
             logger.error('Failed to play episode:', error);
-            this.videoPlayer.showError(`Error: ${error.message}`);
+            this.showSeriesVideoError(`Error: ${error.message}`);
         }
     }
 
-    playDirectVideo(videoUrl, title, episodeId) {
-        // For MKV and other direct video files, use native HTML5 video player
-        const videoPanel = document.getElementById('videoPanel');
-        const videoLarge = document.getElementById('videoPlayerLarge');
-        const videoPanelTitle = document.getElementById('videoPanelTitle');
-        const fallbackLinkLarge = document.getElementById('fallbackLinkLarge');
-        const fallbackUrlLarge = document.getElementById('fallbackUrlLarge');
-        const videoInfoDetails = document.getElementById('videoInfoDetails');
-        const mainContainer = document.getElementById('mainContainer');
+    showSeriesVideoPanel() {
+        const videoPanel = document.getElementById(this.seriesVideoElementIds.videoPanel);
+        const seriesContainer = document.getElementById('seriesContainer');
         
-        // Cleanup any existing HLS player
-        if (this.videoPlayer.hlsPlayer) {
-            this.videoPlayer.hlsPlayer.destroy();
-            this.videoPlayer.hlsPlayer = null;
+        // Ensure series container is in video mode
+        if (seriesContainer) {
+            seriesContainer.classList.add('watching-video');
+        }
+        
+        if (videoPanel) {
+            videoPanel.style.display = 'flex';
+        }
+    }
+
+    hideSeriesVideoPanel() {
+        const videoPanel = document.getElementById(this.seriesVideoElementIds.videoPanel);
+        const seriesContainer = document.getElementById('seriesContainer');
+        
+        if (seriesContainer) {
+            seriesContainer.classList.remove('watching-video');
+        }
+        
+        if (videoPanel) {
+            videoPanel.style.display = 'none';
+        }
+    }
+
+    playEpisodeDirectly(videoUrl, title, episodeId, extension) {
+        // Use native HTML5 video player for all episodes
+        const videoPlayer = document.getElementById(this.seriesVideoElementIds.videoPlayer);
+        const videoPanelTitle = document.getElementById(this.seriesVideoElementIds.videoPanelTitle);
+        const fallbackLinkLarge = document.getElementById(this.seriesVideoElementIds.fallbackLinkLarge);
+        const fallbackUrlLarge = document.getElementById(this.seriesVideoElementIds.fallbackUrlLarge);
+        const videoInfoDetails = document.getElementById(this.seriesVideoElementIds.videoInfoDetails);
+        
+        if (!videoPlayer) {
+            logger.error('Series video player element not found');
+            return;
         }
         
         // Update UI
-        videoPanelTitle.textContent = title;
-        videoInfoDetails.innerHTML = '<span class="stat-item">Direct video playback (MKV)</span>';
-        fallbackUrlLarge.href = videoUrl;
-        fallbackUrlLarge.textContent = videoUrl;
-        fallbackLinkLarge.style.display = 'block';
-        
-        // Show video panel and ensure main container is in watching mode
-        if (mainContainer) {
-            mainContainer.classList.add('watching');
+        if (videoPanelTitle) {
+            videoPanelTitle.textContent = title;
         }
-        videoPanel.style.display = 'flex';
+        if (videoInfoDetails) {
+            const format = extension.toUpperCase();
+            videoInfoDetails.innerHTML = `<span class="stat-item">Direct video playback (${format})</span>`;
+        }
+        if (fallbackUrlLarge) {
+            fallbackUrlLarge.href = videoUrl;
+            fallbackUrlLarge.textContent = videoUrl;
+        }
+        if (fallbackLinkLarge) {
+            fallbackLinkLarge.style.display = 'block';
+        }
         
         // Clear any errors
-        const videoPanelError = document.getElementById('videoPanelError');
+        const videoPanelError = document.getElementById(this.seriesVideoElementIds.videoPanelError);
         if (videoPanelError) {
             videoPanelError.style.display = 'none';
         }
         
-        // Ensure video container is visible
-        const videoContainer = document.querySelector('.video-container-large');
-        if (videoContainer) {
-            videoContainer.style.display = 'flex';
-        }
+        // Clear existing sources
+        videoPlayer.pause();
+        videoPlayer.innerHTML = '';
         
-        // Set video source directly
-        videoLarge.src = videoUrl;
-        videoLarge.load();
+        // **MKV TRICK**: Set type="video/mp4" to trick Chrome into playing MKV files
+        // Create source element with type="video/mp4" regardless of actual format
+        const source = document.createElement('source');
+        source.src = videoUrl;
+        source.type = 'video/mp4'; // This tricks Chrome into attempting playback
+        videoPlayer.appendChild(source);
+        
+        videoPlayer.load();
         
         // Try to play
-        const playPromise = videoLarge.play();
+        const playPromise = videoPlayer.play();
         if (playPromise !== undefined) {
-            playPromise.catch(error => {
-                logger.error('Video play error:', error);
+            playPromise.then(() => {
+                logger.log('Episode playback started successfully:', videoUrl);
+            }).catch(error => {
+                logger.error('Episode play error:', error);
                 if (error.name === 'NotSupportedError') {
-                    this.videoPlayer.showError('This video format (MKV) may not be supported by your browser. Please try using the direct link with VLC or another media player.');
+                    this.showSeriesVideoError('This video format may not be fully supported by your browser. Try using the direct link with VLC or another media player.');
                 } else if (error.name === 'NotAllowedError') {
                     logger.log('Autoplay blocked - user interaction required');
+                    this.showSeriesVideoError('Click the play button to start playback.');
                 } else {
-                    this.videoPlayer.showError(`Playback error: ${error.message}. Try using the direct link.`);
+                    this.showSeriesVideoError(`Playback error: ${error.message}. Try using the direct link.`);
                 }
             });
         }
         
-        logger.log('Direct video playback started for:', videoUrl);
+        logger.log('Direct video playback initiated for:', videoUrl);
+    }
+
+    showSeriesVideoError(message) {
+        const videoPanelError = document.getElementById(this.seriesVideoElementIds.videoPanelError);
+        const videoContainer = document.querySelector('#' + this.seriesVideoElementIds.videoPanel + ' .video-container-large');
+        
+        if (videoPanelError) {
+            videoPanelError.innerHTML = `
+                <div class="error-container">
+                    <div class="error-icon">??</div>
+                    <div class="error-content">
+                        <h3 class="error-title">Playback Error</h3>
+                        <p class="error-message">${message}</p>
+                        <div class="error-actions">
+                            <button class="error-btn fallback-btn" onclick="document.getElementById('${this.seriesVideoElementIds.fallbackLinkLarge}').scrollIntoView()">
+                                ?? Direct Link
+                            </button>
+                            <button class="error-btn close-btn" onclick="document.getElementById('closeSeriesVideoPanel').click()">
+                                ? Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            videoPanelError.style.display = 'block';
+        }
+        
+        if (videoContainer) {
+            videoContainer.style.display = 'none';
+        }
+    }
+
+    closeSeriesVideo() {
+        const videoPlayer = document.getElementById(this.seriesVideoElementIds.videoPlayer);
+        
+        // Stop video playback
+        if (videoPlayer) {
+            videoPlayer.pause();
+            videoPlayer.innerHTML = ''; // Clear sources
+            videoPlayer.load();
+        }
+        
+        // Hide video panel
+        this.hideSeriesVideoPanel();
+        
+        logger.log('Series video closed');
     }
 
     handleSeriesFavoriteToggle(seriesId, isFavorite) {

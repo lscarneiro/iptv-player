@@ -206,21 +206,6 @@ export class IPTVApp {
             this.videoPlayer.closeVideoPanel();
             this.streamList.clearPlayingHighlight();
             
-            // Check if we should return to series view
-            const mainContainer = document.getElementById('mainContainer');
-            const seriesContainer = document.getElementById('seriesContainer');
-            
-            if (this.currentView === 'series') {
-                // Return to series view
-                if (mainContainer) {
-                    mainContainer.style.display = 'none';
-                    mainContainer.classList.remove('watching');
-                }
-                if (seriesContainer) {
-                    seriesContainer.style.display = 'flex';
-                }
-            }
-            
             // Notify mobile navigation
             this.mobileNav.onVideoClosed();
         });
@@ -1010,8 +995,7 @@ export class IPTVApp {
             this.seriesApp = new SeriesApp(
                 this.apiService,
                 this.storageService,
-                this.favoritesService,
-                this.videoPlayer
+                this.favoritesService
             );
             await this.seriesApp.init();
         }
