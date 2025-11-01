@@ -247,7 +247,7 @@ export class EPGService {
     }
 
     /**
-     * Decode Base64 string safely
+     * Decode Base64 string safely with proper UTF-8 handling
      */
     decodeBase64(str) {
         if (!str) return '';
@@ -255,7 +255,18 @@ export class EPGService {
         try {
             // Check if string looks like Base64 (contains only valid Base64 characters)
             if (/^[A-Za-z0-9+/]+=*$/.test(str)) {
-                return atob(str);
+                // Decode Base64 to binary string
+                const binaryString = atob(str);
+                
+                // Convert binary string to UTF-8 bytes
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                
+                // Decode UTF-8 bytes to JavaScript string
+                const decoder = new TextDecoder('utf-8');
+                return decoder.decode(bytes);
             }
             // Not Base64, return as-is
             return str;
