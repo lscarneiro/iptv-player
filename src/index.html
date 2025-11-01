@@ -174,20 +174,22 @@
                 </div>
                 <button class="close-stream-btn" id="closeVideoPanel" title="Close Stream">Close Stream</button>
             </div>
+            <!-- Stream info and direct link below header -->
+            <div class="video-panel-info-bar">
+                <div class="video-info-compact" id="videoInfoCompact">
+                    <div id="videoInfoDetails">Loading stream information...</div>
+                </div>
+                <div class="fallback-link-compact" id="fallbackLinkLarge" style="display: none;">
+                    <strong>Direct Link:</strong> <a href="#" id="fallbackUrlLarge" target="_blank">Open in VLC</a>
+                </div>
+            </div>
             <div class="video-panel-content">
                 <div id="videoPanelError" style="display: none;"></div>
                 <div class="video-container-large">
                     <video class="video-player-large" id="videoPlayerLarge" controls></video>
                 </div>
-                <div class="video-info" id="videoInfo">
-                    <h4 id="videoInfoTitle">Stream Information</h4>
-                    <p id="videoInfoDetails">Select a stream to view details</p>
-                </div>
                 <!-- Stream EPG Container -->
                 <div class="stream-epg-container" id="streamEpgContainer" style="display: none;"></div>
-                <div class="fallback-link-large" id="fallbackLinkLarge" style="display: none;">
-                    <strong>Direct Link:</strong> <a href="#" id="fallbackUrlLarge" target="_blank">Click here to open in new tab</a>
-                </div>
             </div>
         </div>
     </div>

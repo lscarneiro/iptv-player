@@ -320,7 +320,6 @@ export class VideoPlayer {
         const fallbackLinkLarge = document.getElementById('fallbackLinkLarge');
         const fallbackUrl = document.getElementById('fallbackUrl');
         const fallbackUrlLarge = document.getElementById('fallbackUrlLarge');
-        const videoInfoTitle = document.getElementById('videoInfoTitle');
         const videoInfoDetails = document.getElementById('videoInfoDetails');
         
         // Force cleanup to prevent race conditions
@@ -354,7 +353,6 @@ export class VideoPlayer {
         // Update UI
         playerTitle.textContent = streamName;
         videoPanelTitle.textContent = streamName;
-        videoInfoTitle.textContent = streamName;
         videoInfoDetails.innerHTML = '<span class="stat-item">Loading stream information...</span>';
         
         fallbackUrl.href = streamUrl;
