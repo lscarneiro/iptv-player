@@ -14,6 +14,7 @@ const urlsToCache = [
   './js/utils/debounce.js',
   './js/utils/domHelpers.js',
   './js/utils/mobileNavigation.js',
+  './js/utils/logger.js',
   './favicon.svg',
   'https://cdn.jsdelivr.net/npm/hls.js@latest'
 ];

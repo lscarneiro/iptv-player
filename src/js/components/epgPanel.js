@@ -2,6 +2,7 @@
 
 import { TimezoneUtils } from '../utils/timezoneUtils.js';
 import { escapeHtml } from '../utils/domHelpers.js';
+import { logger } from '../utils/logger.js';
 
 export class EPGPanel {
     constructor(containerId) {
@@ -51,7 +52,7 @@ export class EPGPanel {
         this.gridContainer = document.querySelector('.epg-grid-container');
         
         if (!this.channelsContainer || !this.programmesContainer || !this.timeHeaderContainer || !this.gridContainer) {
-            console.error('EPG panel containers not found', {
+            logger.error('EPG panel containers not found', {
                 channels: !!this.channelsContainer,
                 programmes: !!this.programmesContainer,
                 timeHeader: !!this.timeHeaderContainer,
@@ -133,7 +134,7 @@ export class EPGPanel {
         const { scrollTop, scrollHeight, clientHeight } = container;
         
         // Debug logging
-        console.log('[EPG Scroll]', {
+        logger.log('[EPG Scroll]', {
             scrollTop: Math.round(scrollTop),
             scrollHeight: Math.round(scrollHeight),
             clientHeight: Math.round(clientHeight),
@@ -149,7 +150,7 @@ export class EPGPanel {
         // Load more when near bottom
         if (scrollTop + clientHeight >= scrollHeight - threshold) {
             if (this.visibleChannels < this.filteredChannels.length) {
-                console.log('[EPG Scroll] Loading more channels...');
+                logger.log('[EPG Scroll] Loading more channels...');
                 this.loadMoreChannels();
             }
         }
@@ -236,7 +237,7 @@ export class EPGPanel {
         this.visibleChannels = Math.min(50, this.filteredChannels.length);
         
         // Log to confirm only matched channels are shown
-        console.log('[EPG Render]', {
+        logger.log('[EPG Render]', {
             totalChannels: this.filteredChannels.length,
             visibleChannels: this.visibleChannels,
             channelsWithStreamId: this.filteredChannels.filter(c => c.streamId).length,

@@ -1,5 +1,7 @@
 // API Service - handles all API communication
 
+import { logger } from '../utils/logger.js';
+
 export class ApiService {
     constructor(credentials) {
         this.credentials = credentials;
@@ -35,7 +37,7 @@ export class ApiService {
             }
             return await response.json();
         } catch (error) {
-            console.error('API fetch error:', error);
+            logger.error('API fetch error:', error);
             throw error;
         }
     }
@@ -48,7 +50,7 @@ export class ApiService {
             }
             return await response.text();
         } catch (error) {
-            console.error('XML fetch error:', error);
+            logger.error('XML fetch error:', error);
             throw error;
         }
     }
@@ -81,7 +83,7 @@ export class ApiService {
             try {
                 const url = this.buildApiUrl(endpoint.action, endpoint.params);
                 const result = await this.fetchApi(url);
-                console.log(`Tried ${endpoint.action}:`, result);
+                logger.log(`Tried ${endpoint.action}:`, result);
                 
                 // Check if this looks like a stream URL response
                 if (typeof result === 'string' && (result.includes('http') || result.includes('m3u8'))) {
@@ -94,14 +96,14 @@ export class ApiService {
                     }
                 }
             } catch (error) {
-                console.log(`Endpoint ${endpoint.action} failed:`, error.message);
+                logger.log(`Endpoint ${endpoint.action} failed:`, error.message);
                 continue;
             }
         }
         
         // If no endpoint worked, try constructing the stream URL manually
         const manualUrl = `${this.credentials.serverUrl}/live/${this.credentials.username}/${this.credentials.password}/${streamId}.m3u8`;
-        console.log('Trying manual URL construction:', manualUrl);
+        logger.log('Trying manual URL construction:', manualUrl);
         return manualUrl;
     }
 

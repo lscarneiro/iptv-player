@@ -1,6 +1,7 @@
 // User Info Component
 
 import { escapeHtml } from '../utils/domHelpers.js';
+import { logger } from '../utils/logger.js';
 
 export class UserInfo {
     constructor(containerId) {
@@ -121,7 +122,7 @@ export class UserInfo {
                         this.accountContent.innerHTML = '<div class="error">No account information available. Please login first.</div>';
                     }
                 }).catch(err => {
-                    console.error('Failed to load user info:', err);
+                    logger.error('Failed to load user info:', err);
                     this.accountContent.innerHTML = '<div class="error">Failed to load account information.</div>';
                 });
             } else {

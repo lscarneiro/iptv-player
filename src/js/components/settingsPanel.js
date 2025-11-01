@@ -5,6 +5,7 @@ export class SettingsPanel {
         this.panel = document.getElementById('settingsPanel');
         this.onSubmit = null;
         this.onM3u8LoggingChange = null;
+        this.onConsoleLogLevelChange = null;
     }
 
     setOnSubmit(callback) {
@@ -13,6 +14,10 @@ export class SettingsPanel {
 
     setOnM3u8LoggingChange(callback) {
         this.onM3u8LoggingChange = callback;
+    }
+
+    setOnConsoleLogLevelChange(callback) {
+        this.onConsoleLogLevelChange = callback;
     }
 
     setupEventListeners() {
@@ -39,6 +44,23 @@ export class SettingsPanel {
                 this.onM3u8LoggingChange(e.target.checked);
             }
         });
+
+        // Console log level toggles
+        document.getElementById('enableConsoleLog').addEventListener('change', (e) => {
+            if (this.onConsoleLogLevelChange) {
+                this.onConsoleLogLevelChange('log', e.target.checked);
+            }
+        });
+        document.getElementById('enableConsoleWarn').addEventListener('change', (e) => {
+            if (this.onConsoleLogLevelChange) {
+                this.onConsoleLogLevelChange('warn', e.target.checked);
+            }
+        });
+        document.getElementById('enableConsoleError').addEventListener('change', (e) => {
+            if (this.onConsoleLogLevelChange) {
+                this.onConsoleLogLevelChange('error', e.target.checked);
+            }
+        });
     }
 
     open() {
@@ -63,6 +85,12 @@ export class SettingsPanel {
 
     setM3u8LoggingState(enabled) {
         document.getElementById('enableM3u8Logging').checked = enabled;
+    }
+
+    setConsoleLogLevels(levels) {
+        document.getElementById('enableConsoleLog').checked = levels.log !== false;
+        document.getElementById('enableConsoleWarn').checked = levels.warn !== false;
+        document.getElementById('enableConsoleError').checked = levels.error !== false;
     }
 }
 

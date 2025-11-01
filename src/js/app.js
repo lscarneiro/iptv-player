@@ -14,6 +14,7 @@ import { MobileNavigation } from './utils/mobileNavigation.js';
 import { TimezoneUtils } from './utils/timezoneUtils.js';
 import { debounce } from './utils/debounce.js';
 import { toggleClearButton } from './utils/domHelpers.js';
+import { logger } from './utils/logger.js';
 
 export class IPTVApp {
     constructor() {
@@ -40,13 +41,13 @@ export class IPTVApp {
         try {
             await this.storageService.init();
         } catch (error) {
-            console.warn('IndexedDB initialization failed:', error);
+            logger.warn('IndexedDB initialization failed:', error);
         }
         
         try {
             await this.favoritesService.init();
         } catch (error) {
-            console.warn('Favorites service initialization failed:', error);
+            logger.warn('Favorites service initialization failed:', error);
         }
         
         this.setupComponents();
@@ -93,6 +94,10 @@ export class IPTVApp {
 
         this.settingsPanel.setOnM3u8LoggingChange((enabled) => {
             this.handleM3u8LoggingChange(enabled);
+        });
+
+        this.settingsPanel.setOnConsoleLogLevelChange((level, enabled) => {
+            this.handleConsoleLogLevelChange(level, enabled);
         });
 
         // Set up EPG panel callbacks
@@ -202,6 +207,11 @@ export class IPTVApp {
         this.videoPlayer.setM3u8LoggingEnabled(savedM3u8Logging);
         this.settingsPanel.setM3u8LoggingState(savedM3u8Logging);
 
+        // Console log levels
+        const savedLogLevels = this.storageService.loadConsoleLogLevels();
+        logger.setEnabledLevels(savedLogLevels);
+        this.settingsPanel.setConsoleLogLevels(savedLogLevels);
+
         // EPG panel
         document.getElementById('epgToggle').addEventListener('click', () => {
             this.openEPGPanel();
@@ -253,7 +263,7 @@ export class IPTVApp {
         }
 
         try {
-            console.log('Validating credentials...');
+            logger.log('Validating credentials...');
             
             // Check if credentials have changed
             const credentials = this.storageService.loadCredentials();
@@ -264,7 +274,7 @@ export class IPTVApp {
             
             // Only clear cache if credentials changed (do this BEFORE saving new data)
             if (credentialsChanged) {
-                console.log('Credentials changed, clearing old cache...');
+                logger.log('Credentials changed, clearing old cache...');
                 await this.storageService.clearIndexedDB();
             }
             
@@ -302,7 +312,15 @@ export class IPTVApp {
     handleM3u8LoggingChange(enabled) {
         this.videoPlayer.setM3u8LoggingEnabled(enabled);
         this.storageService.saveM3u8Logging(enabled);
-        console.log(`M3U8 logging ${enabled ? 'enabled' : 'disabled'} - changes will apply to new streams`);
+        logger.log(`M3U8 logging ${enabled ? 'enabled' : 'disabled'} - changes will apply to new streams`);
+    }
+
+    handleConsoleLogLevelChange(level, enabled) {
+        const currentLevels = logger.getEnabledLevels();
+        currentLevels[level] = enabled;
+        logger.setEnabledLevels(currentLevels);
+        this.storageService.saveConsoleLogLevels(currentLevels);
+        logger.log(`Console ${level} logging ${enabled ? 'enabled' : 'disabled'}`);
     }
 
     checkSavedCredentials() {
@@ -353,7 +371,7 @@ export class IPTVApp {
             
             // Only update UI if this is still the latest request
             if (requestId !== this.currentCategoryLoadId) {
-                console.log('Category load request outdated, skipping UI update');
+                logger.log('Category load request outdated, skipping UI update');
                 return;
             }
             
@@ -384,14 +402,14 @@ export class IPTVApp {
                         await this.storageService.saveToIndexedDB('streams', 'all_streams', sortedStreams);
                     }
                 } catch (error) {
-                    console.warn('Could not get all channels count:', error);
+                    logger.warn('Could not get all channels count:', error);
                 }
             }
             
             // Final check before updating UI
             if (requestId === this.currentCategoryLoadId) {
                 const favoritesCount = this.favoritesService.getFavoriteCount();
-                console.log('App: Rendering categories with favorites count:', favoritesCount);
+                logger.log('App: Rendering categories with favorites count:', favoritesCount);
                 this.categoryList.render(categories, allChannelsCount, favoritesCount);
             }
             
@@ -476,7 +494,7 @@ export class IPTVApp {
             await this.storageService.saveToIndexedDB('categories', 'live_categories', this.categories);
             
         } catch (error) {
-            console.error('Failed to get category count:', error);
+            logger.error('Failed to get category count:', error);
         }
     }
 
@@ -525,7 +543,7 @@ export class IPTVApp {
             
             // Only update UI if this is still the latest request AND we're still on the same category
             if (requestId !== this.currentStreamLoadId || this.currentCategory !== categoryId) {
-                console.log(`Stream load request outdated (${requestId} vs ${this.currentStreamLoadId}) or category changed, skipping UI update`);
+                logger.log(`Stream load request outdated (${requestId} vs ${this.currentStreamLoadId}) or category changed, skipping UI update`);
                 return;
             }
             
@@ -577,10 +595,10 @@ export class IPTVApp {
             this.videoPlayer.showLoading('Loading stream...');
             
             const streamUrl = await this.apiService.getStreamPlaylist(streamId);
-            console.log('Playlist data received:', streamUrl);
+            logger.log('Playlist data received:', streamUrl);
             
             if (!streamUrl || typeof streamUrl !== 'string') {
-                console.error('Invalid stream URL:', streamUrl);
+                logger.error('Invalid stream URL:', streamUrl);
                 throw new Error('No valid stream URL found in response');
             }
             
@@ -590,7 +608,7 @@ export class IPTVApp {
             this.mobileNav.onStreamStarted();
             
         } catch (error) {
-            console.error('Stream loading error:', error);
+            logger.error('Stream loading error:', error);
             this.videoPlayer.showError(`Error: ${error.message}`);
             document.getElementById('playerSection').classList.add('open');
         }
@@ -629,16 +647,16 @@ export class IPTVApp {
             
             // Only update UI if this is still the latest request
             if (requestId !== this.currentStreamLoadId || this.currentCategory !== 'favorites') {
-                console.log('Favorites load request outdated, skipping UI update');
+                logger.log('Favorites load request outdated, skipping UI update');
                 return;
             }
             
             // Filter to only favorite streams
             const favoriteStreams = this.favoritesService.filterFavoriteStreams(allStreams || []);
-            console.log(`🌟 FAVORITES FILTER: ${allStreams?.length || 0} total streams → ${favoriteStreams.length} favorites`);
-            console.log(`🌟 Current favorites IDs:`, this.favoritesService.getFavorites());
+            logger.log(`?? FAVORITES FILTER: ${allStreams?.length || 0} total streams ? ${favoriteStreams.length} favorites`);
+            logger.log(`?? Current favorites IDs:`, this.favoritesService.getFavorites());
             if (favoriteStreams.length > 0) {
-                console.log(`🌟 Favorite streams:`, favoriteStreams.map(s => ({ id: s.stream_id, name: s.name })));
+                logger.log(`?? Favorite streams:`, favoriteStreams.map(s => ({ id: s.stream_id, name: s.name })));
             }
             
             // Update current category name
@@ -657,13 +675,13 @@ export class IPTVApp {
     handleFavoriteToggle(streamId, isFavorite) {
         // This is called when a favorite is toggled from either stream list or video player
         // The favorites service will handle the actual toggle and notify all listeners
-        console.log(`Stream ${streamId} favorite status changed to: ${isFavorite}`);
+        logger.log(`Stream ${streamId} favorite status changed to: ${isFavorite}`);
     }
 
     handleFavoriteChange(streamId, isFavorite) {
         // This is called by the favorites service when any favorite changes
         // Update UI elements that need to reflect the change
-        console.log(`handleFavoriteChange: Stream ${streamId} favorite status changed to ${isFavorite}`);
+        logger.log(`handleFavoriteChange: Stream ${streamId} favorite status changed to ${isFavorite}`);
         
         // Update stream list stars
         this.streamList.updateStreamFavoriteStatus(streamId, isFavorite);
@@ -673,18 +691,18 @@ export class IPTVApp {
         
         // Update favorites count in category list
         const favoritesCount = this.favoritesService.getFavoriteCount();
-        console.log('Updated favorites count:', favoritesCount);
+        logger.log('Updated favorites count:', favoritesCount);
         const favoritesItem = document.querySelector('[data-category-id="favorites"] .category-count');
         if (favoritesItem) {
             favoritesItem.textContent = `(${favoritesCount})`;
-            console.log('Updated favorites count in UI');
+            logger.log('Updated favorites count in UI');
         } else {
-            console.log('Favorites count element not found');
+            logger.log('Favorites count element not found');
         }
         
         // If we're currently viewing favorites and a stream was unfavorited, refresh the list
         if (this.currentCategory === 'favorites' && !isFavorite) {
-            console.log('Refreshing favorites list after unfavoriting');
+            logger.log('Refreshing favorites list after unfavoriting');
             // Small delay to allow the UI to update before refreshing
             setTimeout(() => {
                 this.loadFavoriteStreams();
@@ -779,7 +797,7 @@ export class IPTVApp {
             }
 
         } catch (error) {
-            console.error('EPG load error:', error);
+            logger.error('EPG load error:', error);
             this.epgPanel.showError(`Failed to load EPG: ${error.message}`);
         }
     }
@@ -793,13 +811,13 @@ export class IPTVApp {
             // Find the channel in EPG data
             const epgData = await this.epgService.getEPGData();
             if (!epgData || !epgData.channels) {
-                console.error('No EPG data available');
+                logger.error('No EPG data available');
                 return;
             }
 
             const channel = epgData.channels.find(c => c.id === channelId);
             if (!channel) {
-                console.error('Channel not found:', channelId);
+                logger.error('Channel not found:', channelId);
                 return;
             }
 
@@ -809,7 +827,7 @@ export class IPTVApp {
             const streamName = channel.streamName || channel.displayName;
 
             if (!streamId) {
-                console.error('No stream ID for channel:', channelId);
+                logger.error('No stream ID for channel:', channelId);
                 return;
             }
 
@@ -827,7 +845,7 @@ export class IPTVApp {
             await this.handleWatchStream(streamId, streamName);
 
         } catch (error) {
-            console.error('EPG channel click error:', error);
+            logger.error('EPG channel click error:', error);
             alert(`Failed to load channel: ${error.message}`);
         }
     }
@@ -847,12 +865,12 @@ export class IPTVApp {
 
 // Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('IPTV Player initializing...');
+    logger.log('IPTV Player initializing...');
     try {
         window.app = new IPTVApp();
-        console.log('IPTV Player initialized successfully');
+        logger.log('IPTV Player initialized successfully');
     } catch (error) {
-        console.error('Failed to initialize IPTV Player:', error);
+        logger.error('Failed to initialize IPTV Player:', error);
     }
 });
 

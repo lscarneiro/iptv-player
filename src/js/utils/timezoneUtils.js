@@ -1,5 +1,7 @@
 // Timezone Utilities - handles timezone detection and EPG timestamp conversion
 
+import { logger } from './logger.js';
+
 export class TimezoneUtils {
     static getDetectedTimezone() {
         try {
@@ -8,7 +10,7 @@ export class TimezoneUtils {
                 return timezone;
             }
         } catch (error) {
-            console.warn('Failed to detect timezone:', error);
+            logger.warn('Failed to detect timezone:', error);
         }
         return 'America/Toronto'; // Default fallback
     }
@@ -71,7 +73,7 @@ export class TimezoneUtils {
         try {
             return new Intl.DateTimeFormat('en-US', formatOptions).format(date);
         } catch (error) {
-            console.warn('Failed to format date:', error);
+            logger.warn('Failed to format date:', error);
             // Fallback formatting
             const month = date.toLocaleString('en-US', { month: 'short' });
             const day = date.getDate();
