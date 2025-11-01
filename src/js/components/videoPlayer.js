@@ -1651,6 +1651,26 @@ export class VideoPlayer {
         if (playerTitle) {
             playerTitle.textContent = message;
         }
+        
+        // Also update video panel
+        const videoPanelTitle = document.getElementById('videoPanelTitle');
+        const videoInfoDetails = document.getElementById('videoInfoDetails');
+        const videoPanel = document.getElementById('videoPanel');
+        
+        if (videoPanelTitle) {
+            videoPanelTitle.textContent = message;
+        }
+        if (videoInfoDetails) {
+            videoInfoDetails.innerHTML = '<span class="stat-item">Loading...</span>';
+        }
+        
+        // Show video panel
+        if (videoPanel) {
+            videoPanel.style.display = 'flex';
+        }
+        
+        // Hide any errors
+        this.hideError();
     }
 
     setupFullscreenHandler(videoElement) {

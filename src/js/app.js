@@ -15,6 +15,7 @@ import { TimezoneUtils } from './utils/timezoneUtils.js';
 import { debounce } from './utils/debounce.js';
 import { toggleClearButton } from './utils/domHelpers.js';
 import { logger } from './utils/logger.js';
+import { SeriesApp } from './seriesApp.js';
 
 export class IPTVApp {
     constructor() {
@@ -33,6 +34,10 @@ export class IPTVApp {
         this.currentCategoryLoadId = 0;
         this.currentStreamLoadId = 0;
         this.currentFilterId = 0;
+        
+        // Series app (lazy loaded)
+        this.seriesApp = null;
+        this.currentView = 'live'; // 'live' or 'series'
         
         this.init();
     }
@@ -126,6 +131,11 @@ export class IPTVApp {
         // Settings panel
         this.settingsPanel.setupEventListeners();
         
+        // Series toggle
+        document.getElementById('seriesToggle').addEventListener('click', () => {
+            this.toggleView();
+        });
+        
         // Account panel
         document.getElementById('accountToggle').addEventListener('click', () => {
             this.userInfo.openAccountPanel();
@@ -195,6 +205,21 @@ export class IPTVApp {
         document.getElementById('closeVideoPanel').addEventListener('click', () => {
             this.videoPlayer.closeVideoPanel();
             this.streamList.clearPlayingHighlight();
+            
+            // Check if we should return to series view
+            const mainContainer = document.getElementById('mainContainer');
+            const seriesContainer = document.getElementById('seriesContainer');
+            
+            if (this.currentView === 'series') {
+                // Return to series view
+                if (mainContainer) {
+                    mainContainer.style.display = 'none';
+                    mainContainer.classList.remove('watching');
+                }
+                if (seriesContainer) {
+                    seriesContainer.style.display = 'flex';
+                }
+            }
             
             // Notify mobile navigation
             this.mobileNav.onVideoClosed();
@@ -962,6 +987,66 @@ export class IPTVApp {
         if (this.mobileNav.isMobile) {
             document.getElementById('mobileNav').style.display = 'block';
             this.mobileNav.setActiveView('categories');
+        }
+    }
+
+    // View Switching Methods
+    async toggleView() {
+        if (this.currentView === 'live') {
+            await this.showSeriesView();
+        } else {
+            this.showLiveView();
+        }
+    }
+
+    async showSeriesView() {
+        logger.log('Switching to Series view');
+        
+        // Hide live view
+        document.getElementById('mainContainer').style.display = 'none';
+        
+        // Initialize series app if not already done
+        if (!this.seriesApp) {
+            this.seriesApp = new SeriesApp(
+                this.apiService,
+                this.storageService,
+                this.favoritesService,
+                this.videoPlayer
+            );
+            await this.seriesApp.init();
+        }
+        
+        // Show series view
+        this.seriesApp.show();
+        
+        this.currentView = 'series';
+        
+        // Update button state
+        const seriesToggle = document.getElementById('seriesToggle');
+        if (seriesToggle) {
+            seriesToggle.textContent = 'Live TV';
+            seriesToggle.classList.add('active');
+        }
+    }
+
+    showLiveView() {
+        logger.log('Switching to Live view');
+        
+        // Hide series view
+        if (this.seriesApp) {
+            this.seriesApp.hide();
+        }
+        
+        // Show live view
+        document.getElementById('mainContainer').style.display = 'flex';
+        
+        this.currentView = 'live';
+        
+        // Update button state
+        const seriesToggle = document.getElementById('seriesToggle');
+        if (seriesToggle) {
+            seriesToggle.textContent = 'Series';
+            seriesToggle.classList.remove('active');
         }
     }
 }

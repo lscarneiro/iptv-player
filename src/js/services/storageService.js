@@ -9,7 +9,7 @@ export class StorageService {
 
     async init() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open('IPTVPlayerDB', 3); // Increment version to trigger upgrade
+            const request = indexedDB.open('IPTVPlayerDB', 4); // Increment version to trigger upgrade
             
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
@@ -49,6 +49,22 @@ export class StorageService {
                 if (!db.objectStoreNames.contains('epg')) {
                     db.createObjectStore('epg', { keyPath: 'key' });
                     logger.log('Created epg store');
+                }
+                
+                // Series stores
+                if (!db.objectStoreNames.contains('seriesCategories')) {
+                    db.createObjectStore('seriesCategories', { keyPath: 'key' });
+                    logger.log('Created seriesCategories store');
+                }
+                
+                if (!db.objectStoreNames.contains('series')) {
+                    db.createObjectStore('series', { keyPath: 'key' });
+                    logger.log('Created series store');
+                }
+                
+                if (!db.objectStoreNames.contains('seriesInfo')) {
+                    db.createObjectStore('seriesInfo', { keyPath: 'key' });
+                    logger.log('Created seriesInfo store');
                 }
                 
                 logger.log('Available stores:', Array.from(db.objectStoreNames));
@@ -115,7 +131,7 @@ export class StorageService {
             return Promise.resolve();
         }
         return new Promise((resolve, reject) => {
-            const stores = ['categories', 'streams', 'userInfo', 'favorites', 'epg'];
+            const stores = ['categories', 'streams', 'userInfo', 'favorites', 'epg', 'seriesCategories', 'series', 'seriesInfo'];
             const transaction = this.db.transaction(stores, 'readwrite');
             
             let completed = 0;
@@ -162,6 +178,7 @@ export class StorageService {
             localStorage.removeItem('enableM3u8Logging');
             localStorage.removeItem('consoleLogLevels');
             localStorage.removeItem('favorite_streams');
+            localStorage.removeItem('favorite_series');
             localStorage.removeItem('epg_timezone');
             
             logger.log('All data cleared successfully');
@@ -242,6 +259,33 @@ export class StorageService {
                 reject(error);
             }
         });
+    }
+
+    // Series data management
+    async saveSeriesCategories(categories) {
+        return await this.saveToIndexedDB('seriesCategories', 'series_categories', categories);
+    }
+
+    async getSeriesCategories() {
+        return await this.getFromIndexedDB('seriesCategories', 'series_categories');
+    }
+
+    async saveSeries(categoryId, series) {
+        const key = categoryId ? `series_category_${categoryId}` : 'all_series';
+        return await this.saveToIndexedDB('series', key, series);
+    }
+
+    async getSeries(categoryId) {
+        const key = categoryId ? `series_category_${categoryId}` : 'all_series';
+        return await this.getFromIndexedDB('series', key);
+    }
+
+    async saveSeriesInfo(seriesId, info) {
+        return await this.saveToIndexedDB('seriesInfo', `series_info_${seriesId}`, info);
+    }
+
+    async getSeriesInfo(seriesId) {
+        return await this.getFromIndexedDB('seriesInfo', `series_info_${seriesId}`);
     }
 }
 

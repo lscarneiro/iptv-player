@@ -8,10 +8,11 @@ IPTV Player is a web application for streaming and watching IPTV channels. It fe
 src/
 ├── js/
 │   ├── app.js                    # Main application orchestrator
+│   ├── seriesApp.js              # Series application controller
 │   ├── services/
-│   │   ├── apiService.js         # API communication service
+│   │   ├── apiService.js         # API communication service (live + series)
 │   │   ├── epgService.js         # EPG data fetching, parsing, and storage
-│   │   ├── favoritesService.js   # Favorite streams management
+│   │   ├── favoritesService.js   # Favorite streams and series management
 │   │   └── storageService.js     # IndexedDB and localStorage management
 │   ├── components/
 │   │   ├── bufferingManager.js   # Buffering detection and recovery
@@ -19,10 +20,13 @@ src/
 │   │   ├── epgPanel.js           # TV guide grid display component
 │   │   ├── errorHandler.js       # Error handling and UI management
 │   │   ├── retryManager.js       # Retry logic with exponential backoff
+│   │   ├── seriesCategoryList.js # Series category list component
+│   │   ├── seriesInfoPanel.js    # Series details and episode list component
+│   │   ├── seriesList.js         # Series grid display component
 │   │   ├── settingsPanel.js      # Settings panel component
 │   │   ├── streamList.js         # Stream list UI component
 │   │   ├── userInfo.js           # User information display component
-│   │   └── videoPlayer.js        # Video player component
+│   │   └── videoPlayer.js        # Video player component (live + episodes)
 │   └── utils/
 │       ├── debounce.js           # Debounce utility
 │       ├── domHelpers.js         # DOM manipulation utilities
@@ -36,6 +40,24 @@ src/
 └── favicon files                  # App icons
 ```
 
+## Features
+
+### Live TV Streaming
+- Browse and watch live IPTV channels
+- Category-based organization with search
+- Favorites management for quick access
+- Electronic Program Guide (EPG) integration
+- Infinite scroll for large channel lists
+
+### Series Player (NEW)
+- Browse and watch TV series and episodes
+- Grid-based series display with cover art
+- Series categories and favorites
+- Season and episode management
+- Detailed series information (cast, plot, ratings)
+- Episode thumbnails and metadata
+- Seamless episode playback using the same video player
+
 ## Architecture Overview
 
 ### Services Layer
@@ -43,11 +65,19 @@ src/
   - Builds API URLs with credentials
   - Fetches user info, categories, and streams
   - Gets stream playlist URLs
+  - **Series API methods**:
+    - `getSeriesCategories()` - Fetch series categories
+    - `getSeries(categoryId)` - Fetch series by category
+    - `getSeriesInfo(seriesId)` - Fetch series details with seasons/episodes
+    - `getEpisodeStreamUrl(episodeId)` - Get episode stream URL
   
 - **storageService.js**: Manages data persistence
-  - IndexedDB for caching categories, streams, and user info
+  - IndexedDB for caching categories, streams, user info, series, and favorites
   - localStorage for credentials and settings
   - Provides async/await interface for all storage operations
+  - **Series storage**:
+    - Separate stores for series categories, series lists, and series info
+    - Caches series data for offline access
 
 ### Components Layer
 - **categoryList.js**: Displays and manages categories
@@ -104,6 +134,27 @@ src/
   - Back button handling
   - Responsive UI state management
 
+### Series Components
+- **seriesCategoryList.js**: Displays series categories
+  - Groups categories by prefix
+  - "All Series" and "Favorites" special categories
+  - Category selection and search
+  
+- **seriesList.js**: Grid display of series with covers
+  - Responsive grid layout (poster covers)
+  - Infinite scroll for large libraries
+  - Series search and filtering
+  - Favorite toggle per series
+  - Click to view series details
+  
+- **seriesInfoPanel.js**: Detailed series information panel
+  - Backdrop image header
+  - Series metadata (plot, cast, director, genre, rating)
+  - Season accordion with episode lists
+  - Episode thumbnails and metadata
+  - Play episode buttons
+  - Series favorite toggle
+
 ### Main Application (app.js)
 The main `IPTVApp` class:
 - Initializes all services and components
@@ -111,6 +162,15 @@ The main `IPTVApp` class:
 - Orchestrates data flow between components
 - Handles authentication and login
 - Manages category and stream loading
+- **View switching** between Live TV and Series Player
+
+### Series Application (seriesApp.js)
+The `SeriesApp` class (lazy loaded):
+- Manages series-specific state and components
+- Handles series category and series loading
+- Coordinates series info fetching and display
+- Manages episode playback
+- Shares services with main app (API, storage, favorites, video player)
 
 ## Key Benefits
 
@@ -123,6 +183,21 @@ The main `IPTVApp` class:
 ## Usage
 
 The application loads automatically when `index.html` is opened in a browser. It uses ES6 modules, so ensure you're serving from a local web server (not opening the file directly).
+
+### Switching Between Live TV and Series
+- Click the "Series" button in the header to switch to Series Player
+- Click "Live TV" (when in Series view) to return to Live TV
+- Both views share the same authentication and video player
+- Favorites are managed separately for Live TV and Series
+
+### Using the Series Player
+1. Click "Series" in the header to open the Series Player
+2. Browse series categories in the left panel
+3. Select a category to view series in the grid
+4. Click on a series card to view detailed information
+5. Expand seasons to see episode lists
+6. Click on an episode to start playback
+7. Use the favorite star (⭐) to add series to favorites
 
 ## M3U8 Debug Logging
 

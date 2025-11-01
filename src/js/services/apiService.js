@@ -139,5 +139,58 @@ export class ApiService {
             return null; // Return null instead of throwing to gracefully handle missing EPG
         }
     }
+
+    // Series API Methods
+
+    async getSeriesCategories() {
+        const url = this.buildApiUrl('get_series_categories');
+        return await this.fetchApi(url);
+    }
+
+    async getSeries(categoryId = null) {
+        const params = categoryId ? { category_id: categoryId } : {};
+        const url = this.buildApiUrl('get_series', params);
+        return await this.fetchApi(url);
+    }
+
+    async getSeriesInfo(seriesId) {
+        const url = this.buildApiUrl('get_series_info', { series_id: seriesId });
+        return await this.fetchApi(url);
+    }
+
+    async getEpisodeStreamUrl(episodeId, extension = 'mkv') {
+        // Try different endpoints that might return the episode URL
+        const endpoints = [
+            { action: 'get_simple_data_table', params: { stream_id: episodeId } },
+            { action: 'get_vod_info', params: { vod_id: episodeId } }
+        ];
+        
+        for (const endpoint of endpoints) {
+            try {
+                const url = this.buildApiUrl(endpoint.action, endpoint.params);
+                const result = await this.fetchApi(url);
+                logger.log(`Tried ${endpoint.action}:`, result);
+                
+                // Check if this looks like a stream URL response
+                if (typeof result === 'string' && (result.includes('http') || result.includes('m3u8') || result.includes('mkv'))) {
+                    return result;
+                } else if (result && typeof result === 'object') {
+                    // Look for common stream URL properties
+                    const streamUrl = result.url || result.stream_url || result.link || result.playlist_url || result.movie_data?.stream_url;
+                    if (streamUrl && typeof streamUrl === 'string') {
+                        return streamUrl;
+                    }
+                }
+            } catch (error) {
+                logger.log(`Endpoint ${endpoint.action} failed:`, error.message);
+                continue;
+            }
+        }
+        
+        // If no endpoint worked, try constructing the episode URL manually
+        const manualUrl = `${this.credentials.serverUrl}/series/${this.credentials.username}/${this.credentials.password}/${episodeId}.${extension}`;
+        logger.log('Trying manual URL construction:', manualUrl);
+        return manualUrl;
+    }
 }
 
