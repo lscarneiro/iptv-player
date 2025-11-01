@@ -423,8 +423,9 @@ body {
 
 /* Stream EPG Container Styles */
 .stream-epg-container {
-    flex: 1 1 30%;
-    min-height: 30%;
+    flex: 0 0 auto;
+    min-height: 200px;
+    max-height: 40vh;
     display: flex;
     flex-direction: column;
     padding: 0;
@@ -593,6 +594,11 @@ body {
 
     .fallback-link-compact {
         font-size: 0.8rem;
+    }
+
+    .stream-epg-container {
+        min-height: 180px;
+        max-height: 35vh;
     }
 
     .stream-epg-header {
