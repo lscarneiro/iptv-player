@@ -56,6 +56,24 @@
                     </label>
                     <small>Logs M3U8 tags (starting with #) to browser console for debugging ad-breaks and stream issues</small>
                 </div>
+                <div class="form-group">
+                    <label>Console Logging Levels</label>
+                    <small>Control which types of console messages are displayed</small>
+                    <div class="logging-checkboxes">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="enableConsoleLog" checked>
+                            <span>Info logs (console.log)</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="enableConsoleWarn" checked>
+                            <span>Warnings (console.warn)</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="enableConsoleError" checked>
+                            <span>Errors (console.error)</span>
+                        </label>
+                    </div>
+                </div>
                 <button type="submit" class="btn">Connect</button>
             </form>
         </div>

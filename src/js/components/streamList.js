@@ -1,6 +1,7 @@
 // Stream List Component
 
 import { escapeHtml } from '../utils/domHelpers.js';
+import { logger } from '../utils/logger.js';
 
 export class StreamList {
     constructor(containerId) {
@@ -41,7 +42,7 @@ export class StreamList {
                 const threshold = 200; // Load more when 200px from bottom
                 
                 // Debug logging (can be removed in production)
-                // console.log('Scroll check:', { scrollTop, scrollHeight, clientHeight, threshold });
+                // logger.log('Scroll check:', { scrollTop, scrollHeight, clientHeight, threshold });
                 
                 if (scrollTop + clientHeight >= scrollHeight - threshold) {
                     this.loadMoreAutomatically();
@@ -107,7 +108,7 @@ export class StreamList {
 
     setFavoritesService(favoritesService) {
         this.favoritesService = favoritesService;
-        console.log('StreamList: Favorites service set:', !!favoritesService);
+        logger.log('StreamList: Favorites service set:', !!favoritesService);
     }
 
     setOnFavoriteToggle(callback) {
@@ -162,7 +163,7 @@ export class StreamList {
         
         // Check if this render is still valid
         if (!this.shouldContinueOperation(requestId)) {
-            console.log('Render request outdated or component destroyed, skipping');
+            logger.log('Render request outdated or component destroyed, skipping');
             return;
         }
         
@@ -524,20 +525,20 @@ export class StreamList {
     }
 
     async handleFavoriteToggle(streamId, buttonElement) {
-        console.log(`🌟 FAVORITE TOGGLE: StreamId=${streamId} (${typeof streamId}), Service=${!!this.favoritesService}`);
+        logger.log(`🌟 FAVORITE TOGGLE: StreamId=${streamId} (${typeof streamId}), Service=${!!this.favoritesService}`);
         
         if (!this.favoritesService) {
-            console.warn('Favorites service not available');
+            logger.warn('Favorites service not available');
             return;
         }
 
         try {
             const beforeState = this.favoritesService.isFavorite(streamId);
-            console.log(`🌟 Before toggle: ${beforeState}`);
+            logger.log(`🌟 Before toggle: ${beforeState}`);
             
             const isFavorite = await this.favoritesService.toggleFavorite(streamId);
-            console.log(`🌟 After toggle: ${isFavorite}`);
-            console.log(`🌟 All favorites now:`, this.favoritesService.getFavorites());
+            logger.log(`🌟 After toggle: ${isFavorite}`);
+            logger.log(`🌟 All favorites now:`, this.favoritesService.getFavorites());
             
             this.updateFavoriteButton(buttonElement, isFavorite);
             
@@ -546,7 +547,7 @@ export class StreamList {
                 this.onFavoriteToggle(streamId, isFavorite);
             }
         } catch (error) {
-            console.error('Failed to toggle favorite:', error);
+            logger.error('Failed to toggle favorite:', error);
         }
     }
 

@@ -1,5 +1,7 @@
 // DOM helper utilities
 
+import { logger } from './logger.js';
+
 export function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
@@ -21,13 +23,13 @@ export function toggleClearButton(buttonId, value) {
 // Utility function to reliably scroll an element to the top
 export function scrollToTop(element) {
     if (!element) {
-        console.warn('scrollToTop: element is null or undefined');
+        logger.warn('scrollToTop: element is null or undefined');
         return;
     }
     
     // Check if element is actually scrollable
     if (typeof element.scrollTop === 'undefined') {
-        console.warn('scrollToTop: element is not scrollable');
+        logger.warn('scrollToTop: element is not scrollable');
         return;
     }
     
@@ -47,7 +49,7 @@ export function scrollToTop(element) {
             firstChild.scrollIntoView({ block: 'start', inline: 'nearest' });
         }
     } catch (error) {
-        console.warn('Error scrolling to top:', error);
+        logger.warn('Error scrolling to top:', error);
     }
 }
 

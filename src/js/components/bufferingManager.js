@@ -1,4 +1,7 @@
 // Buffering Manager - Handles buffering detection and recovery
+
+import { logger } from '../utils/logger.js';
+
 export class BufferingManager {
     constructor(videoPlayer, errorHandler) {
         this.videoPlayer = videoPlayer;
@@ -54,26 +57,26 @@ export class BufferingManager {
         
         // Progressive response to buffering issues
         if (recentEvents.length >= 3 && this.recoveryAttempts === 0) {
-            console.warn(`Initial buffering issues detected (${recentEvents.length} events), attempting automatic recovery`);
+            logger.warn(`Initial buffering issues detected (${recentEvents.length} events), attempting automatic recovery`);
             this.attemptRecovery();
         } else if (recentEvents.length >= 5 && this.recoveryAttempts === 1) {
-            console.warn(`Persistent buffering issues (${recentEvents.length} events), trying background stream reload`);
+            logger.warn(`Persistent buffering issues (${recentEvents.length} events), trying background stream reload`);
             this.errorHandler.showNotification('Improving stream quality...');
             this.videoPlayer.reloadStreamInBackground();
         } else if (recentEvents.length >= 8) {
-            console.warn('Severe buffering detected after recovery attempts, showing user options');
+            logger.warn('Severe buffering detected after recovery attempts, showing user options');
             this.showBufferingDialog();
         }
     }
 
     attemptRecovery(videoElement = null) {
         if (this.recoveryAttempts >= this.maxRecoveryAttempts) {
-            console.log('Max buffering recovery attempts reached');
+            logger.log('Max buffering recovery attempts reached');
             return;
         }
 
         this.recoveryAttempts++;
-        console.log(`Attempting buffering recovery (attempt ${this.recoveryAttempts}/${this.maxRecoveryAttempts})`);
+        logger.log(`Attempting buffering recovery (attempt ${this.recoveryAttempts}/${this.maxRecoveryAttempts})`);
 
         const video = videoElement || document.getElementById('videoPlayerLarge');
         
@@ -94,12 +97,12 @@ export class BufferingManager {
                     if (video.paused || video.readyState < 3) {
                         const seekTime = Math.max(0, currentTime - 2);
                         video.currentTime = seekTime;
-                        video.play().catch(e => console.warn('Recovery play failed:', e));
+                        video.play().catch(e => logger.warn('Recovery play failed:', e));
                     }
                 }, 3000);
                 
             } catch (error) {
-                console.warn('Buffering recovery attempt failed:', error);
+                logger.warn('Buffering recovery attempt failed:', error);
             }
         }
     }

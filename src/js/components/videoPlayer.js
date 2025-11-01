@@ -3,6 +3,7 @@
 import { escapeHtml } from '../utils/domHelpers.js';
 import { RetryManager } from './retryManager.js';
 import { BufferingManager } from './bufferingManager.js';
+import { logger } from '../utils/logger.js';
 
 export class VideoPlayer {
     constructor() {
@@ -50,7 +51,7 @@ export class VideoPlayer {
 
     setM3u8LoggingEnabled(enabled) {
         this.m3u8LoggingEnabled = enabled;
-        console.log(`M3U8 tag logging ${enabled ? 'enabled' : 'disabled'}`);
+        logger.log(`M3U8 tag logging ${enabled ? 'enabled' : 'disabled'}`);
     }
 
     setFavoritesService(favoritesService) {
@@ -72,7 +73,7 @@ export class VideoPlayer {
             tags.forEach((tag, index) => {
                 const trimmedTag = tag.trim();
                 if (trimmedTag) {
-                    console.log(`${index + 1}. ${trimmedTag}`);
+                    logger.log(`${index + 1}. ${trimmedTag}`);
                 }
             });
             console.groupEnd();
@@ -288,12 +289,12 @@ export class VideoPlayer {
         if (videoRegular) {
             this.setupFullscreenHandler(videoRegular);
         } else {
-            console.warn('videoRegular not found');
+            logger.warn('videoRegular not found');
         }
         if (videoLarge) {
             this.setupFullscreenHandler(videoLarge);
         } else {
-            console.warn('videoLarge not found');
+            logger.warn('videoLarge not found');
         }
     }
 
@@ -317,7 +318,7 @@ export class VideoPlayer {
         // Don't allow starting a new stream if current one is known to be unsupported
         // (unless it's a different stream)
         if (this.unsupportedFormatDetected && this.currentStreamUrl === streamUrl) {
-            console.warn('Refusing to restart stream that was detected as unsupported');
+            logger.warn('Refusing to restart stream that was detected as unsupported');
             return;
         }
         
@@ -412,7 +413,7 @@ export class VideoPlayer {
 
     setupHlsPlayer(streamUrl, videoElement) {
         // Check browser codec support (async but don't wait)
-        this.logBrowserCapabilities().catch(e => console.warn('Codec detection error:', e));
+        this.logBrowserCapabilities().catch(e => logger.warn('Codec detection error:', e));
         
         const hlsConfig = {
             enableWorker: true,
@@ -447,18 +448,18 @@ export class VideoPlayer {
                             const content = response.data || response;
                             if (typeof content === 'string' && content.includes('#EXTM3U')) {
                                 console.group(`📄 Raw M3U8 Content from ${context.url}`);
-                                console.log('Full content:');
-                                console.log(content);
+                                logger.log('Full content:');
+                                logger.log(content);
                                 
                                 // Extract and log tags directly
                                 const lines = content.split('\n');
                                 const tags = lines.filter(line => line.trim().startsWith('#'));
                                 if (tags.length > 0) {
-                                    console.log(`\n🏷️ Found ${tags.length} M3U8 tags:`);
+                                    logger.log(`\n🏷️ Found ${tags.length} M3U8 tags:`);
                                     tags.forEach(tag => {
                                         const trimmedTag = tag.trim();
                                         if (trimmedTag) {
-                                            console.log(trimmedTag);
+                                            logger.log(trimmedTag);
                                         }
                                     });
                                 }
@@ -482,8 +483,8 @@ export class VideoPlayer {
         videoElement.controls = true;
         videoElement.preload = 'metadata';
         
-        console.log('HLS player attached to video element:', videoElement.id);
-        console.log('Video element visibility:', {
+        logger.log('HLS player attached to video element:', videoElement.id);
+        logger.log('Video element visibility:', {
             display: getComputedStyle(videoElement).display,
             visibility: getComputedStyle(videoElement).visibility,
             opacity: getComputedStyle(videoElement).opacity,
@@ -505,8 +506,8 @@ export class VideoPlayer {
 
     setupHlsEventListeners(videoElement) {
         this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-            console.log('HLS manifest parsed successfully');
-            console.log('Available levels:', data.levels?.map(l => `${l.width}x${l.height}@${l.bitrate}`));
+            logger.log('HLS manifest parsed successfully');
+            logger.log('Available levels:', data.levels?.map(l => `${l.width}x${l.height}@${l.bitrate}`));
             
             // Check codec compatibility
             if (data.levels && data.levels.length > 0) {
@@ -521,9 +522,9 @@ export class VideoPlayer {
         // Log main manifest content
         this.hlsPlayer.on(Hls.Events.MANIFEST_LOADED, (event, data) => {
             if (this.m3u8LoggingEnabled && data.details && data.details.url) {
-                console.log('📄 Main M3U8 manifest loaded from:', data.details.url);
+                logger.log('📄 Main M3U8 manifest loaded from:', data.details.url);
                 if (data.details.totalduration) {
-                    console.log('📊 Total duration:', data.details.totalduration);
+                    logger.log('📊 Total duration:', data.details.totalduration);
                 }
             }
         });
@@ -532,24 +533,24 @@ export class VideoPlayer {
         this.hlsPlayer.on(Hls.Events.LEVEL_LOADED, (event, data) => {
             if (this.m3u8LoggingEnabled && data.details) {
                 console.group('📺 Level playlist loaded');
-                console.log('Level:', data.level);
-                console.log('URL:', data.details.url);
-                console.log('Type:', data.details.type);
-                console.log('Live:', data.details.live);
+                logger.log('Level:', data.level);
+                logger.log('URL:', data.details.url);
+                logger.log('Type:', data.details.type);
+                logger.log('Live:', data.details.live);
                 if (data.details.fragments && data.details.fragments.length > 0) {
-                    console.log('Fragments:', data.details.fragments.length);
-                    console.log('Target duration:', data.details.targetduration);
+                    logger.log('Fragments:', data.details.fragments.length);
+                    logger.log('Target duration:', data.details.targetduration);
                     
                     // Log any special fragments (like ad markers)
                     const specialFragments = data.details.fragments.filter(frag => 
                         frag.tagList && frag.tagList.length > 0
                     );
                     if (specialFragments.length > 0) {
-                        console.log(`Fragments with tags: ${specialFragments.length}`);
+                        logger.log(`Fragments with tags: ${specialFragments.length}`);
                         specialFragments.forEach((frag, index) => {
-                            console.log(`Fragment ${index + 1} tags:`);
+                            logger.log(`Fragment ${index + 1} tags:`);
                             frag.tagList.forEach(tag => {
-                                console.log(`  ${tag}`);
+                                logger.log(`  ${tag}`);
                             });
                         });
                     }
@@ -561,21 +562,21 @@ export class VideoPlayer {
         // Log audio track changes (could indicate ad-breaks)
         this.hlsPlayer.on(Hls.Events.AUDIO_TRACK_SWITCHED, (event, data) => {
             if (this.m3u8LoggingEnabled) {
-                console.log('🔊 Audio track switched:', data);
+                logger.log('🔊 Audio track switched:', data);
             }
         });
 
         // Log subtitle track changes
         this.hlsPlayer.on(Hls.Events.SUBTITLE_TRACK_SWITCH, (event, data) => {
             if (this.m3u8LoggingEnabled) {
-                console.log('📝 Subtitle track switched:', data);
+                logger.log('📝 Subtitle track switched:', data);
             }
         });
 
         // Log level switches (quality changes that might happen during ads)
         this.hlsPlayer.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
             if (this.m3u8LoggingEnabled) {
-                console.log('📊 Quality level switched to:', data.level);
+                logger.log('📊 Quality level switched to:', data.level);
             }
             // Update stream info when quality level changes
             this.updateStreamInfo(videoElement);
@@ -585,7 +586,7 @@ export class VideoPlayer {
             if (!this.playbackStarted) {
                 this.playbackStarted = true;
                 this.retryManager.reset(); // Reset retry count on successful start
-                console.log('First fragment loaded - playback started');
+                logger.log('First fragment loaded - playback started');
                 this.clearLoadingTimeout();
                 this.clearNetworkMonitoring();
                 this.dismissAutoplayError();
@@ -606,26 +607,26 @@ export class VideoPlayer {
                 
                 if (hasSpecialProps) {
                     console.group(`🎬 Fragment ${frag.sn} loaded with special properties`);
-                    console.log('URL:', frag.url);
-                    console.log('Duration:', frag.duration);
+                    logger.log('URL:', frag.url);
+                    logger.log('Duration:', frag.duration);
                     
                     if (frag.tagList?.length > 0) {
-                        console.log('📋 Tags:');
+                        logger.log('📋 Tags:');
                         frag.tagList.forEach(tag => {
-                            console.log(`  ${tag}`);
+                            logger.log(`  ${tag}`);
                         });
                     }
                     if (frag.programDateTime) {
-                        console.log('🕐 Program Date Time:', frag.programDateTime);
+                        logger.log('🕐 Program Date Time:', frag.programDateTime);
                     }
                     if (frag.discontinuity) {
-                        console.log('⚠️ Discontinuity detected (possible ad-break)');
+                        logger.log('⚠️ Discontinuity detected (possible ad-break)');
                     }
                     if (frag.gap) {
-                        console.log('🕳️ Gap fragment detected');
+                        logger.log('🕳️ Gap fragment detected');
                     }
                     if (frag.byteRange && frag.byteRange.length > 0) {
-                        console.log('📏 Byte range:', frag.byteRange);
+                        logger.log('📏 Byte range:', frag.byteRange);
                     }
                     
                     console.groupEnd();
@@ -635,16 +636,16 @@ export class VideoPlayer {
         
         this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
             console.group('❌ HLS Error Details');
-            console.error('Type:', data.type);
-            console.error('Details:', data.details);
-            console.error('Fatal:', data.fatal);
-            if (data.reason) console.error('Reason:', data.reason);
-            if (data.frag) console.error('Fragment:', data.frag.url);
+            logger.error('Type:', data.type);
+            logger.error('Details:', data.details);
+            logger.error('Fatal:', data.fatal);
+            if (data.reason) logger.error('Reason:', data.reason);
+            if (data.frag) logger.error('Fragment:', data.frag.url);
             if (data.response) {
-                console.error('Response code:', data.response.code);
-                console.error('Response text:', data.response.text);
+                logger.error('Response code:', data.response.code);
+                logger.error('Response text:', data.response.text);
             }
-            if (data.error) console.error('Error object:', data.error);
+            if (data.error) logger.error('Error object:', data.error);
             console.groupEnd();
             
             this.handleHlsError(data, videoElement);
@@ -653,24 +654,24 @@ export class VideoPlayer {
 
     setupVideoEventListeners(videoElement) {
         videoElement.addEventListener('loadstart', () => {
-            console.log('Video load started');
+            logger.log('Video load started');
         });
         
         videoElement.addEventListener('loadedmetadata', () => {
-            console.log('Video metadata loaded - dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+            logger.log('Video metadata loaded - dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
             // Update stream info when metadata is loaded
             this.updateStreamInfo(videoElement);
         });
         
         videoElement.addEventListener('loadeddata', () => {
-            console.log('Video data loaded');
+            logger.log('Video data loaded');
         });
         
         videoElement.addEventListener('canplay', () => {
             if (!this.playbackStarted) {
                 this.playbackStarted = true;
                 this.retryManager.reset();
-                console.log('Video can play - playback starting');
+                logger.log('Video can play - playback starting');
                 this.clearLoadingTimeout();
                 this.clearNetworkMonitoring();
                 this.dismissAutoplayError();
@@ -680,10 +681,10 @@ export class VideoPlayer {
         });
         
         videoElement.addEventListener('playing', () => {
-            console.log('Video is now playing');
-            console.log('Video tracks:', videoElement.videoTracks?.length || 'N/A');
-            console.log('Audio tracks:', videoElement.audioTracks?.length || 'N/A');
-            console.log('Video dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+            logger.log('Video is now playing');
+            logger.log('Video tracks:', videoElement.videoTracks?.length || 'N/A');
+            logger.log('Audio tracks:', videoElement.audioTracks?.length || 'N/A');
+            logger.log('Video dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
             
             if (!this.playbackStarted) {
                 this.playbackStarted = true;
@@ -697,22 +698,22 @@ export class VideoPlayer {
         });
         
         videoElement.addEventListener('play', () => {
-            console.log('Video play event fired');
+            logger.log('Video play event fired');
             this.dismissAutoplayError();
         });
         
         videoElement.addEventListener('error', (e) => {
-            console.error('Video element error:', e);
+            logger.error('Video element error:', e);
             this.handleVideoError(e);
         });
         
         videoElement.addEventListener('stalled', () => {
-            console.warn('Video playback stalled');
+            logger.warn('Video playback stalled');
             this.recordBufferingEvent('stalled');
         });
         
         videoElement.addEventListener('waiting', () => {
-            console.warn('Video waiting for data');
+            logger.warn('Video waiting for data');
             this.recordBufferingEvent('waiting');
         });
     }
@@ -722,7 +723,7 @@ export class VideoPlayer {
         
         // Check if this is a black.ts fragment error (no signal)
         if (frag && frag.url && frag.url.includes('black.ts')) {
-            console.log('Detected black.ts fragment - no signal');
+            logger.log('Detected black.ts fragment - no signal');
             this.handleNoSignal();
             return;
         }
@@ -747,14 +748,14 @@ export class VideoPlayer {
             }
         } else {
             // Non-fatal errors - log but continue
-            console.warn('Non-fatal HLS error:', data);
+            logger.warn('Non-fatal HLS error:', data);
         }
     }
 
     handleNetworkError(details, data) {
         // Check if this is a CORS error with black.ts (no signal)
         if (data.frag && data.frag.url && data.frag.url.includes('black.ts')) {
-            console.log('CORS error with black.ts fragment - no signal');
+            logger.log('CORS error with black.ts fragment - no signal');
             this.handleNoSignal();
             return;
         }
@@ -763,7 +764,7 @@ export class VideoPlayer {
             // Stream failed to start
             if (this.retryManager.canRetry()) {
                 const delay = this.retryManager.getNextRetryDelay();
-                console.log(`Retrying stream load (attempt ${this.retryManager.getCurrentAttempt()}/${this.retryManager.getMaxRetries()}) in ${delay}ms`);
+                logger.log(`Retrying stream load (attempt ${this.retryManager.getCurrentAttempt()}/${this.retryManager.getMaxRetries()}) in ${delay}ms`);
                 setTimeout(() => {
                     this.retryStream();
                 }, delay);
@@ -792,7 +793,7 @@ export class VideoPlayer {
         if (details === Hls.ErrorDetails.FRAG_PARSING_ERROR || 
             details === Hls.ErrorDetails.MANIFEST_PARSING_ERROR) {
             this.mediaErrorCount++;
-            console.warn(`HLS parsing error (${details}), count: ${this.mediaErrorCount}/${this.maxMediaErrors}`);
+            logger.warn(`HLS parsing error (${details}), count: ${this.mediaErrorCount}/${this.maxMediaErrors}`);
             
             if (this.mediaErrorCount >= this.maxMediaErrors) {
                 this.isHandlingError = true;
@@ -828,7 +829,7 @@ export class VideoPlayer {
             // Try to recover from media error
             try {
                 this.hlsPlayer.recoverMediaError();
-                console.log('Attempting to recover from media error');
+                logger.log('Attempting to recover from media error');
             } catch (e) {
                 this.handleError('MEDIA_RECOVERY_FAILED', 
                     'Playback error occurred and recovery failed.',
@@ -840,7 +841,7 @@ export class VideoPlayer {
     handleVideoError(error) {
         // Prevent handling the same error multiple times
         if (this.isHandlingError) {
-            console.log('Already handling an error, ignoring duplicate');
+            logger.log('Already handling an error, ignoring duplicate');
             return;
         }
         
@@ -848,12 +849,12 @@ export class VideoPlayer {
         const errorCode = videoElement.error ? videoElement.error.code : 'unknown';
         const errorMessage = videoElement.error ? videoElement.error.message : 'Unknown error';
         
-        console.log(`Video error details - Code: ${errorCode}, Message: ${errorMessage}`);
+        logger.log(`Video error details - Code: ${errorCode}, Message: ${errorMessage}`);
         
         // Error code 4 = MEDIA_ERR_SRC_NOT_SUPPORTED - format/codec not supported
         if (errorCode === 4) {
             this.mediaErrorCount++;
-            console.warn(`Media error count: ${this.mediaErrorCount}/${this.maxMediaErrors}`);
+            logger.warn(`Media error count: ${this.mediaErrorCount}/${this.maxMediaErrors}`);
             
             // If we keep getting error code 4, the format is unsupported
             if (this.mediaErrorCount >= this.maxMediaErrors) {
@@ -916,12 +917,12 @@ export class VideoPlayer {
         const isWindows = /Win/.test(userAgent);
         const isIOS = /iPhone|iPad|iPod/.test(userAgent);
         
-        console.log(`Browser: ${isSafari ? 'Safari' : isEdge ? 'Edge' : isChrome ? 'Chrome' : isFirefox ? 'Firefox' : 'Unknown'}`);
-        console.log(`OS: ${isMac ? 'macOS' : isWindows ? 'Windows' : isIOS ? 'iOS' : 'Other'}`);
+        logger.log(`Browser: ${isSafari ? 'Safari' : isEdge ? 'Edge' : isChrome ? 'Chrome' : isFirefox ? 'Firefox' : 'Unknown'}`);
+        logger.log(`OS: ${isMac ? 'macOS' : isWindows ? 'Windows' : isIOS ? 'iOS' : 'Other'}`);
         
         // Check MediaSource support
         if (window.MediaSource) {
-            console.log('✅ MediaSource API supported');
+            logger.log('✅ MediaSource API supported');
             
             // Common video codecs with detailed H.265 variants
             const videoCodecs = [
@@ -936,12 +937,12 @@ export class VideoPlayer {
                 { mime: 'video/webm; codecs="vp9"', name: 'VP9' },
             ];
             
-            console.log('Video codec support (MediaSource):');
+            logger.log('Video codec support (MediaSource):');
             const hevcSupported = [];
             videoCodecs.forEach(({mime, name}) => {
                 const supported = MediaSource.isTypeSupported(mime);
                 const status = supported ? '✅' : '❌';
-                console.log(`  ${status} ${name}`);
+                logger.log(`  ${status} ${name}`);
                 if (supported && name.includes('H.265')) {
                     hevcSupported.push(name);
                 }
@@ -949,19 +950,19 @@ export class VideoPlayer {
             
             // Special H.265/HEVC guidance
             if (hevcSupported.length > 0) {
-                console.log('🎉 H.265/HEVC is supported on this browser!');
+                logger.log('🎉 H.265/HEVC is supported on this browser!');
             } else {
-                console.warn('⚠️  H.265/HEVC is NOT supported');
+                logger.warn('⚠️  H.265/HEVC is NOT supported');
                 if (isSafari || isIOS) {
-                    console.log('💡 Tip: Safari usually supports H.265, but MediaSource API might not expose it');
+                    logger.log('💡 Tip: Safari usually supports H.265, but MediaSource API might not expose it');
                 } else if (isEdge && isWindows) {
-                    console.log('💡 Tip: Edge on Windows may support H.265 with hardware acceleration enabled');
-                    console.log('   Check: edge://flags/#enable-media-foundation-for-hevc');
+                    logger.log('💡 Tip: Edge on Windows may support H.265 with hardware acceleration enabled');
+                    logger.log('   Check: edge://flags/#enable-media-foundation-for-hevc');
                 } else if (isChrome) {
-                    console.log('💡 Tip: Chrome does not support H.265 due to licensing. Try:');
-                    console.log('   • Open the stream in VLC Media Player');
-                    console.log('   • Use Safari (if on macOS)');
-                    console.log('   • Use Edge with hardware acceleration');
+                    logger.log('💡 Tip: Chrome does not support H.265 due to licensing. Try:');
+                    logger.log('   • Open the stream in VLC Media Player');
+                    logger.log('   • Use Safari (if on macOS)');
+                    logger.log('   • Use Edge with hardware acceleration');
                 }
             }
             
@@ -973,19 +974,19 @@ export class VideoPlayer {
                 { mime: 'audio/webm; codecs="opus"', name: 'Opus' },
             ];
             
-            console.log('Audio codec support:');
+            logger.log('Audio codec support:');
             audioCodecs.forEach(({mime, name}) => {
                 const supported = MediaSource.isTypeSupported(mime);
                 const status = supported ? '✅' : '❌';
-                console.log(`  ${status} ${name}`);
+                logger.log(`  ${status} ${name}`);
             });
         } else {
-            console.warn('❌ MediaSource API not supported');
+            logger.warn('❌ MediaSource API not supported');
         }
         
         // Check WebCodecs API (newer standard for codec access)
         if (window.VideoDecoder) {
-            console.log('✅ WebCodecs API available');
+            logger.log('✅ WebCodecs API available');
             
             // Check H.265 support via WebCodecs
             try {
@@ -997,23 +998,23 @@ export class VideoPlayer {
                 
                 const support = await VideoDecoder.isConfigSupported(hevcConfig);
                 if (support.supported) {
-                    console.log('🎉 H.265/HEVC decoding available via WebCodecs!');
-                    console.log('   Hardware acceleration:', support.config.hardwareAcceleration || 'unknown');
+                    logger.log('🎉 H.265/HEVC decoding available via WebCodecs!');
+                    logger.log('   Hardware acceleration:', support.config.hardwareAcceleration || 'unknown');
                     this.webCodecsHevcSupported = true;
                 } else {
-                    console.log('❌ H.265/HEVC not supported via WebCodecs');
+                    logger.log('❌ H.265/HEVC not supported via WebCodecs');
                 }
             } catch (e) {
-                console.log('⚠️  Could not check WebCodecs H.265 support:', e.message);
+                logger.log('⚠️  Could not check WebCodecs H.265 support:', e.message);
             }
         } else {
-            console.log('❌ WebCodecs API not available');
-            console.log('   (WebCodecs is a newer API for advanced codec support)');
+            logger.log('❌ WebCodecs API not available');
+            logger.log('   (WebCodecs is a newer API for advanced codec support)');
         }
         
         // Check HLS.js support
         if (window.Hls) {
-            console.log('✅ HLS.js available (version: ' + Hls.version + ')');
+            logger.log('✅ HLS.js available (version: ' + Hls.version + ')');
         }
         
         console.groupEnd();
@@ -1028,8 +1029,8 @@ export class VideoPlayer {
         levels.forEach((level, index) => {
             const codecs = level.attrs?.CODECS || level.codecs;
             if (codecs) {
-                console.log(`Level ${index}: ${level.width}x${level.height}`);
-                console.log(`  Codecs: ${codecs}`);
+                logger.log(`Level ${index}: ${level.width}x${level.height}`);
+                logger.log(`  Codecs: ${codecs}`);
                 
                 // Try to determine if codecs are supported
                 const codecParts = codecs.split(',').map(c => c.trim());
@@ -1043,7 +1044,7 @@ export class VideoPlayer {
                     if (codec.startsWith('avc1')) {
                         mimeType = `video/mp4; codecs="${codec}"`;
                         supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
-                        console.log(`  ${supported ? '✅' : '❌'} H.264 (${codec})`);
+                        logger.log(`  ${supported ? '✅' : '❌'} H.264 (${codec})`);
                         if (supported) levelSupported = true;
                     } else if (codec.startsWith('hev1') || codec.startsWith('hvc1')) {
                         hasHevc = true;
@@ -1051,38 +1052,38 @@ export class VideoPlayer {
                         supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
                         
                         if (supported) {
-                            console.log(`  ✅ H.265/HEVC (${codec}) - SUPPORTED!`);
+                            logger.log(`  ✅ H.265/HEVC (${codec}) - SUPPORTED!`);
                             levelSupported = true;
                         } else {
-                            console.log(`  ⚠️  H.265/HEVC (${codec}) - NOT SUPPORTED`);
+                            logger.log(`  ⚠️  H.265/HEVC (${codec}) - NOT SUPPORTED`);
                             
                             // Check if WebCodecs might help
                             if (this.webCodecsHevcSupported) {
-                                console.log(`     💡 WebCodecs may provide H.265 support`);
+                                logger.log(`     💡 WebCodecs may provide H.265 support`);
                             }
                         }
                     } else if (codec.startsWith('av01')) {
                         mimeType = `video/mp4; codecs="${codec}"`;
                         supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
-                        console.log(`  ${supported ? '✅' : '❌'} AV1 (${codec})`);
+                        logger.log(`  ${supported ? '✅' : '❌'} AV1 (${codec})`);
                         if (supported) levelSupported = true;
                     } else if (codec.startsWith('vp')) {
                         mimeType = `video/webm; codecs="${codec}"`;
                         supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
-                        console.log(`  ${supported ? '✅' : '❌'} ${codec.toUpperCase()}`);
+                        logger.log(`  ${supported ? '✅' : '❌'} ${codec.toUpperCase()}`);
                         if (supported) levelSupported = true;
                     }
                     // Audio codecs
                     else if (codec.startsWith('mp4a')) {
                         mimeType = `audio/mp4; codecs="${codec}"`;
                         supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
-                        console.log(`  ${supported ? '✅' : '❌'} AAC (${codec})`);
+                        logger.log(`  ${supported ? '✅' : '❌'} AAC (${codec})`);
                     } else if (codec.toLowerCase().includes('opus')) {
                         mimeType = `audio/webm; codecs="opus"`;
                         supported = window.MediaSource && MediaSource.isTypeSupported(mimeType);
-                        console.log(`  ${supported ? '✅' : '❌'} Opus`);
+                        logger.log(`  ${supported ? '✅' : '❌'} Opus`);
                     } else {
-                        console.log(`  ❓ Unknown codec: ${codec}`);
+                        logger.log(`  ❓ Unknown codec: ${codec}`);
                     }
                 });
                 
@@ -1090,23 +1091,23 @@ export class VideoPlayer {
                     allLevelsUnsupported = false;
                 }
             } else {
-                console.warn(`Level ${index}: No codec information available`);
+                logger.warn(`Level ${index}: No codec information available`);
             }
         });
         
         // Show summary and recommendations
         if (hasHevc && allLevelsUnsupported) {
             console.group('⚠️  CODEC COMPATIBILITY WARNING');
-            console.warn('All quality levels use H.265/HEVC which is not supported by this browser');
-            console.log('');
-            console.log('📋 Recommended solutions:');
-            console.log('1. Use VLC Media Player with the direct stream link');
-            console.log('2. Try Safari browser (if on macOS/iOS)');
-            console.log('3. Try Microsoft Edge with hardware acceleration enabled');
-            console.log('4. Request server to provide H.264 streams');
+            logger.warn('All quality levels use H.265/HEVC which is not supported by this browser');
+            logger.log('');
+            logger.log('📋 Recommended solutions:');
+            logger.log('1. Use VLC Media Player with the direct stream link');
+            logger.log('2. Try Safari browser (if on macOS/iOS)');
+            logger.log('3. Try Microsoft Edge with hardware acceleration enabled');
+            logger.log('4. Request server to provide H.264 streams');
             console.groupEnd();
         } else if (hasHevc && !allLevelsUnsupported) {
-            console.log('ℹ️  Stream has both H.265 and supported codecs - should work');
+            logger.log('ℹ️  Stream has both H.265 and supported codecs - should work');
         }
         
         console.groupEnd();
@@ -1128,7 +1129,7 @@ export class VideoPlayer {
     }
 
     handleUnsupportedFormat(errorCode, errorMessage) {
-        console.error('Unsupported stream format detected - stopping retry attempts');
+        logger.error('Unsupported stream format detected - stopping retry attempts');
         
         // Stop any ongoing loading or retries
         this.clearLoadingTimeout();
@@ -1197,7 +1198,7 @@ export class VideoPlayer {
             return; // Already handled
         }
         
-        console.log('Stream ended - stopping player and showing dialog');
+        logger.log('Stream ended - stopping player and showing dialog');
         this.streamEndDetected = true;
         
         // Stop the HLS player to prevent further fragment loading attempts
@@ -1215,7 +1216,7 @@ export class VideoPlayer {
 
     retryStream() {
         if (this.currentStreamUrl && this.isWatching) {
-            console.log('Retrying stream:', this.currentStreamUrl);
+            logger.log('Retrying stream:', this.currentStreamUrl);
             const videoElement = document.getElementById('videoPlayerLarge');
             this.initializePlayer(this.currentStreamUrl, videoElement);
         }
@@ -1227,7 +1228,7 @@ export class VideoPlayer {
         this.bufferingCheckInterval = setInterval(() => {
             // Stop monitoring if unsupported format detected
             if (this.unsupportedFormatDetected) {
-                console.log('Stopping buffering monitor - unsupported format detected');
+                logger.log('Stopping buffering monitor - unsupported format detected');
                 this.clearBufferingMonitor();
                 return;
             }
@@ -1265,20 +1266,20 @@ export class VideoPlayer {
         // Don't record buffering events if we've detected an unsupported format
         // This prevents rapid-fire buffer attempts when the real issue is codec incompatibility
         if (this.unsupportedFormatDetected) {
-            console.log('Ignoring buffering event - unsupported format already detected');
+            logger.log('Ignoring buffering event - unsupported format already detected');
             return;
         }
         
         // Don't record buffering events if we're handling an error
         if (this.isHandlingError) {
-            console.log('Ignoring buffering event - error is being handled');
+            logger.log('Ignoring buffering event - error is being handled');
             return;
         }
         
         const now = Date.now();
         this.bufferingEvents.push({ type, timestamp: now });
         
-        console.log(`Buffering event recorded: ${type} (total: ${this.bufferingEvents.length})`);
+        logger.log(`Buffering event recorded: ${type} (total: ${this.bufferingEvents.length})`);
         
         // Keep only events from last 2 minutes
         this.bufferingEvents = this.bufferingEvents.filter(
@@ -1302,7 +1303,7 @@ export class VideoPlayer {
         );
         
         if (recentEvents.length >= 5) {
-            console.warn(`Frequent buffering detected (${recentEvents.length} events), suggesting stream reload`);
+            logger.warn(`Frequent buffering detected (${recentEvents.length} events), suggesting stream reload`);
             this.showBufferingIssueDialog();
         }
     }
@@ -1325,7 +1326,7 @@ export class VideoPlayer {
         
         // Check if we have too many fragment errors in a short time
         if (this.fragmentErrors.length >= this.maxFragmentErrors) {
-            console.warn('Too many fragment errors detected, likely stream ended or network issues');
+            logger.warn('Too many fragment errors detected, likely stream ended or network issues');
             
             // Check if errors are all the same URL (likely stream ended)
             const uniqueUrls = [...new Set(this.fragmentErrors.map(e => e.url))];
@@ -1429,7 +1430,7 @@ export class VideoPlayer {
     }
 
     handleError(errorType, message, showRetry = false) {
-        console.error(`Video Player Error [${errorType}]:`, message);
+        logger.error(`Video Player Error [${errorType}]:`, message);
         
         // Stop any ongoing monitoring
         this.clearBufferingMonitor();
@@ -1606,7 +1607,7 @@ export class VideoPlayer {
 
     reloadStream() {
         if (this.currentStreamUrl && this.isWatching) {
-            console.log('Reloading stream:', this.currentStreamUrl);
+            logger.log('Reloading stream:', this.currentStreamUrl);
             // Reset error tracking when manually reloading
             this.bufferingEvents = [];
             this.fragmentErrors = [];
@@ -1666,7 +1667,7 @@ export class VideoPlayer {
 
     // Force cleanup to prevent race conditions
     forceCleanupCurrentStream() {
-        console.log('Force cleaning up current stream state');
+        logger.log('Force cleaning up current stream state');
         this.cleanup();
         
         // Reset video element more carefully to prevent issues
@@ -1729,7 +1730,7 @@ export class VideoPlayer {
     handleNoSignal() {
         if (this.streamEndDetected) return;
         
-        console.log('No signal detected');
+        logger.log('No signal detected');
         this.streamEndDetected = true;
         
         if (this.hlsPlayer) {
@@ -1752,7 +1753,7 @@ export class VideoPlayer {
     // Improved autoplay handling
     attemptAutoplay(videoElement, context) {
         videoElement.play().then(() => {
-            console.log('Autoplay successful');
+            logger.log('Autoplay successful');
         }).catch(e => {
             this.handleAutoplayFailure(videoElement, e, context);
         });
@@ -1914,7 +1915,7 @@ export class VideoPlayer {
 
     async handleVideoFavoriteToggle(streamId) {
         if (!this.favoritesService) {
-            console.warn('Favorites service not available');
+            logger.warn('Favorites service not available');
             return;
         }
 
@@ -1927,7 +1928,7 @@ export class VideoPlayer {
                 this.onFavoriteToggle(streamId, isFavorite);
             }
         } catch (error) {
-            console.error('Failed to toggle favorite:', error);
+            logger.error('Failed to toggle favorite:', error);
         }
     }
 

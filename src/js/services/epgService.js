@@ -1,6 +1,7 @@
 // EPG Service - handles EPG data fetching, parsing, and storage
 
 import { TimezoneUtils } from '../utils/timezoneUtils.js';
+import { logger } from '../utils/logger.js';
 
 export class EPGService {
     constructor(apiService, storageService) {
@@ -122,7 +123,7 @@ export class EPGService {
                     startDate = TimezoneUtils.convertToLocalTime(startStr);
                     stopDate = TimezoneUtils.convertToLocalTime(stopStr);
                 } catch (error) {
-                    console.warn(`Failed to parse timestamp for programme: ${startStr}`, error);
+                    logger.warn(`Failed to parse timestamp for programme: ${startStr}`, error);
                     processedProgrammes++;
                     continue;
                 }
@@ -190,7 +191,7 @@ export class EPGService {
             };
 
         } catch (error) {
-            console.error('EPG fetch and parse error:', error);
+            logger.error('EPG fetch and parse error:', error);
             if (this.parsingProgress) {
                 this.parsingProgress({ stage: 'error', message: `Error: ${error.message}`, progress: 0 });
             }

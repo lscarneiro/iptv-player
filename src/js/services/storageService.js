@@ -1,5 +1,7 @@
 // Storage Service - handles IndexedDB and localStorage
 
+import { logger } from '../utils/logger.js';
+
 export class StorageService {
     constructor() {
         this.db = null;
@@ -17,39 +19,39 @@ export class StorageService {
             
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
-                console.log('IndexedDB upgrade needed, creating stores...');
+                logger.log('IndexedDB upgrade needed, creating stores...');
                 
                 // Categories store
                 if (!db.objectStoreNames.contains('categories')) {
                     db.createObjectStore('categories', { keyPath: 'key' });
-                    console.log('Created categories store');
+                    logger.log('Created categories store');
                 }
                 
                 // Streams store
                 if (!db.objectStoreNames.contains('streams')) {
                     db.createObjectStore('streams', { keyPath: 'key' });
-                    console.log('Created streams store');
+                    logger.log('Created streams store');
                 }
                 
                 // User info store
                 if (!db.objectStoreNames.contains('userInfo')) {
                     db.createObjectStore('userInfo', { keyPath: 'key' });
-                    console.log('Created userInfo store');
+                    logger.log('Created userInfo store');
                 }
                 
                 // Favorites store
                 if (!db.objectStoreNames.contains('favorites')) {
                     db.createObjectStore('favorites', { keyPath: 'key' });
-                    console.log('Created favorites store');
+                    logger.log('Created favorites store');
                 }
                 
                 // EPG store
                 if (!db.objectStoreNames.contains('epg')) {
                     db.createObjectStore('epg', { keyPath: 'key' });
-                    console.log('Created epg store');
+                    logger.log('Created epg store');
                 }
                 
-                console.log('Available stores:', Array.from(db.objectStoreNames));
+                logger.log('Available stores:', Array.from(db.objectStoreNames));
             };
         });
     }
@@ -57,7 +59,7 @@ export class StorageService {
     // IndexedDB operations
     saveToIndexedDB(storeName, key, data) {
         if (!this.db) {
-            console.warn('IndexedDB not available, skipping cache save');
+            logger.warn('IndexedDB not available, skipping cache save');
             return Promise.resolve();
         }
         return new Promise((resolve, reject) => {
@@ -68,11 +70,11 @@ export class StorageService {
                 
                 request.onsuccess = () => resolve();
                 request.onerror = () => {
-                    console.error(`Failed to save to IndexedDB: ${storeName}/${key}`, request.error);
+                    logger.error(`Failed to save to IndexedDB: ${storeName}/${key}`, request.error);
                     reject(request.error);
                 };
             } catch (error) {
-                console.error(`Error accessing IndexedDB store ${storeName}:`, error);
+                logger.error(`Error accessing IndexedDB store ${storeName}:`, error);
                 reject(error);
             }
         });
@@ -80,7 +82,7 @@ export class StorageService {
 
     getFromIndexedDB(storeName, key) {
         if (!this.db) {
-            console.warn('IndexedDB not available, skipping cache read');
+            logger.warn('IndexedDB not available, skipping cache read');
             return Promise.resolve(null);
         }
         return new Promise((resolve, reject) => {
@@ -97,11 +99,11 @@ export class StorageService {
                     }
                 };
                 request.onerror = () => {
-                    console.error(`Failed to read from IndexedDB: ${storeName}/${key}`, request.error);
+                    logger.error(`Failed to read from IndexedDB: ${storeName}/${key}`, request.error);
                     reject(request.error);
                 };
             } catch (error) {
-                console.error(`Error accessing IndexedDB store ${storeName}:`, error);
+                logger.error(`Error accessing IndexedDB store ${storeName}:`, error);
                 reject(error);
             }
         });
@@ -109,7 +111,7 @@ export class StorageService {
 
     clearIndexedDB() {
         if (!this.db) {
-            console.warn('IndexedDB not available, skipping cache clear');
+            logger.warn('IndexedDB not available, skipping cache clear');
             return Promise.resolve();
         }
         return new Promise((resolve, reject) => {
@@ -165,6 +167,24 @@ export class StorageService {
         return saved !== null ? saved === 'true' : false; // Default to false
     }
 
+    saveConsoleLogLevels(levels) {
+        localStorage.setItem('consoleLogLevels', JSON.stringify(levels));
+    }
+
+    loadConsoleLogLevels() {
+        const saved = localStorage.getItem('consoleLogLevels');
+        if (saved) {
+            try {
+                return JSON.parse(saved);
+            } catch (e) {
+                // Return defaults if parsing fails
+                return { log: true, warn: true, error: true };
+            }
+        }
+        // Default: all enabled
+        return { log: true, warn: true, error: true };
+    }
+
     // EPG data management
     async saveEPGData(channels, programmes) {
         const epgData = {
@@ -181,7 +201,7 @@ export class StorageService {
 
     async clearEPGData() {
         if (!this.db) {
-            console.warn('IndexedDB not available, skipping EPG cache clear');
+            logger.warn('IndexedDB not available, skipping EPG cache clear');
             return Promise.resolve();
         }
         return new Promise((resolve, reject) => {
@@ -192,11 +212,11 @@ export class StorageService {
                 
                 request.onsuccess = () => resolve();
                 request.onerror = () => {
-                    console.error('Failed to clear EPG data:', request.error);
+                    logger.error('Failed to clear EPG data:', request.error);
                     reject(request.error);
                 };
             } catch (error) {
-                console.error('Error clearing EPG data:', error);
+                logger.error('Error clearing EPG data:', error);
                 reject(error);
             }
         });
