@@ -3,6 +3,7 @@
 import { escapeHtml } from '../utils/domHelpers.js';
 import { RetryManager } from './retryManager.js';
 import { BufferingManager } from './bufferingManager.js';
+import { TimezoneUtils } from '../utils/timezoneUtils.js';
 import { logger } from '../utils/logger.js';
 
 export class VideoPlayer {
@@ -12,6 +13,8 @@ export class VideoPlayer {
         this.currentStreamUrl = null;
         this.currentStreamName = null;
         this.currentStreamId = null;
+        this.apiService = null;
+        this.epgService = null;
         this.playbackStarted = false;
         this.retryManager = new RetryManager(5);
         this.bufferingCheckInterval = null;
@@ -60,6 +63,14 @@ export class VideoPlayer {
 
     setOnFavoriteToggle(callback) {
         this.onFavoriteToggle = callback;
+    }
+
+    setApiService(apiService) {
+        this.apiService = apiService;
+    }
+
+    setEpgService(epgService) {
+        this.epgService = epgService;
     }
 
     logM3u8Tags(content, type = 'manifest') {
@@ -353,6 +364,9 @@ export class VideoPlayer {
         
         // Setup favorite star
         this.setupFavoriteStar(streamId);
+        
+        // Fetch and display stream EPG
+        this.fetchAndDisplayStreamEPG(streamId);
         
         // Show 3-column layout
         mainContainer.classList.add('watching');
@@ -1952,6 +1966,93 @@ export class VideoPlayer {
         if (this.currentStreamId === streamId) {
             this.updateVideoFavoriteStar(isFavorite);
         }
+    }
+
+    // Fetch and display stream EPG
+    async fetchAndDisplayStreamEPG(streamId) {
+        if (!this.apiService || !this.epgService) {
+            logger.warn('API or EPG service not available for fetching stream EPG');
+            return;
+        }
+
+        const epgContainer = document.getElementById('streamEpgContainer');
+        if (!epgContainer) {
+            logger.warn('Stream EPG container not found');
+            return;
+        }
+
+        try {
+            // Show loading state
+            epgContainer.innerHTML = '<div class="stream-epg-loading">Loading program guide...</div>';
+            epgContainer.style.display = 'block';
+
+            // Fetch stream EPG data
+            const epgData = await this.apiService.getStreamEPG(streamId);
+
+            // If no EPG data, hide the container and return
+            if (!epgData) {
+                epgContainer.style.display = 'none';
+                epgContainer.innerHTML = '';
+                return;
+            }
+
+            // Process EPG data to get nearest programmes
+            const programmes = this.epgService.getNearestProgrammes(epgData, 5);
+
+            // If no programmes, hide the container
+            if (!programmes || programmes.length === 0) {
+                epgContainer.style.display = 'none';
+                epgContainer.innerHTML = '';
+                return;
+            }
+
+            // Render the programmes
+            this.renderStreamEPG(programmes);
+
+        } catch (error) {
+            logger.error('Failed to fetch stream EPG:', error);
+            // Hide container on error
+            epgContainer.style.display = 'none';
+            epgContainer.innerHTML = '';
+        }
+    }
+
+    // Render stream EPG programmes
+    renderStreamEPG(programmes) {
+        const epgContainer = document.getElementById('streamEpgContainer');
+        if (!epgContainer) return;
+
+        const now = Date.now();
+
+        let html = '<div class="stream-epg-header">Program Guide</div>';
+        html += '<div class="stream-epg-list">';
+
+        programmes.forEach(programme => {
+            const startTime = TimezoneUtils.formatTimeShort(programme.start);
+            const endTime = TimezoneUtils.formatTimeShort(programme.stop);
+            const isCurrent = programme.isCurrent;
+            const isPast = programme.stopTime < now;
+            const isUpcoming = programme.startTime > now;
+
+            const statusClass = isCurrent ? 'current' : (isPast ? 'past' : 'upcoming');
+            const statusLabel = isCurrent ? '● NOW' : (isPast ? '' : 'UPCOMING');
+
+            html += `
+                <div class="stream-epg-item ${statusClass}">
+                    <div class="stream-epg-time">
+                        ${startTime} - ${endTime}
+                        ${statusLabel ? `<span class="stream-epg-status">${statusLabel}</span>` : ''}
+                    </div>
+                    <div class="stream-epg-title">${escapeHtml(programme.title)}</div>
+                    ${programme.description ? `<div class="stream-epg-desc">${escapeHtml(programme.description)}</div>` : ''}
+                </div>
+            `;
+        });
+
+        html += '</div>';
+
+        epgContainer.innerHTML = html;
+        epgContainer.style.display = 'block';
     }
 }
 

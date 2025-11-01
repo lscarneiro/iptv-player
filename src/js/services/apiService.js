@@ -116,5 +116,28 @@ export class ApiService {
         
         return await this.fetchXml(url.toString());
     }
+
+    async getStreamEPG(streamId) {
+        try {
+            const url = this.buildApiUrl('get_simple_data_table', { stream_id: streamId });
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Check if we have valid EPG data
+            if (!data || !data.epg_listings || data.epg_listings.length === 0) {
+                return null;
+            }
+            
+            return data;
+        } catch (error) {
+            logger.error('Stream EPG fetch error:', error);
+            return null; // Return null instead of throwing to gracefully handle missing EPG
+        }
+    }
 }
 

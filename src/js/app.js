@@ -82,6 +82,8 @@ export class IPTVApp {
         this.videoPlayer.setOnFavoriteToggle((streamId, isFavorite) => {
             this.handleFavoriteToggle(streamId, isFavorite);
         });
+        this.videoPlayer.setApiService(this.apiService);
+        this.videoPlayer.setEpgService(this.epgService);
 
         // Set up favorites change listener
         this.favoritesService.setOnFavoriteChange((streamId, isFavorite) => {

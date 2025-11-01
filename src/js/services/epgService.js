@@ -245,5 +245,97 @@ export class EPGService {
             stream.epg_channel_id.trim() === channelId.trim()
         );
     }
+
+    /**
+     * Process stream EPG data from get_simple_data_table API
+     * Returns formatted programs with current program highlighted
+     */
+    processStreamEPG(epgData) {
+        if (!epgData || !epgData.epg_listings || epgData.epg_listings.length === 0) {
+            return null;
+        }
+
+        const now = Date.now();
+        const programmes = [];
+
+        // Process each EPG listing
+        for (const listing of epgData.epg_listings) {
+            try {
+                // Parse the timestamps (they should be in EPG format or Unix timestamp)
+                let startDate, stopDate;
+                
+                // Check if timestamps are in Unix format (numbers as strings)
+                if (typeof listing.start === 'string' && /^\d+$/.test(listing.start)) {
+                    // Unix timestamp in seconds
+                    startDate = new Date(parseInt(listing.start) * 1000);
+                    stopDate = new Date(parseInt(listing.stop) * 1000);
+                } else if (typeof listing.start === 'number') {
+                    // Unix timestamp in seconds
+                    startDate = new Date(listing.start * 1000);
+                    stopDate = new Date(listing.stop * 1000);
+                } else {
+                    // Try EPG format
+                    startDate = TimezoneUtils.parseEPGTimestamp(listing.start);
+                    stopDate = TimezoneUtils.parseEPGTimestamp(listing.stop);
+                }
+
+                const programme = {
+                    title: listing.title || 'Untitled',
+                    description: listing.description || listing.desc || '',
+                    start: startDate,
+                    stop: stopDate,
+                    startTime: startDate.getTime(),
+                    stopTime: stopDate.getTime(),
+                    isCurrent: now >= startDate.getTime() && now < stopDate.getTime()
+                };
+
+                programmes.push(programme);
+            } catch (error) {
+                logger.warn('Failed to parse stream EPG listing:', listing, error);
+                continue;
+            }
+        }
+
+        // Sort by start time
+        programmes.sort((a, b) => a.startTime - b.startTime);
+
+        // Find the current program index
+        const currentIndex = programmes.findIndex(p => p.isCurrent);
+
+        return {
+            programmes,
+            currentIndex,
+            hasData: programmes.length > 0
+        };
+    }
+
+    /**
+     * Get nearest programs for display (current + next few)
+     */
+    getNearestProgrammes(epgData, count = 5) {
+        const processed = this.processStreamEPG(epgData);
+        
+        if (!processed || !processed.hasData) {
+            return null;
+        }
+
+        const { programmes, currentIndex } = processed;
+        
+        if (currentIndex >= 0) {
+            // Return current program + next programs
+            return programmes.slice(currentIndex, currentIndex + count);
+        } else {
+            // No current program, find the next upcoming program
+            const now = Date.now();
+            const nextIndex = programmes.findIndex(p => p.startTime > now);
+            
+            if (nextIndex >= 0) {
+                return programmes.slice(nextIndex, nextIndex + count);
+            } else {
+                // All programs are in the past, return last few
+                return programmes.slice(-count);
+            }
+        }
+    }
 }
 
