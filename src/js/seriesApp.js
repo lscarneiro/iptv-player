@@ -345,6 +345,18 @@ export class SeriesApp {
         try {
             logger.log(`Playing episode ${episodeId}: ${episodeTitle} (${extension})`);
             
+            // Hide series container and show main container for video playback
+            const seriesContainer = document.getElementById('seriesContainer');
+            const mainContainer = document.getElementById('mainContainer');
+            
+            if (seriesContainer) {
+                seriesContainer.style.display = 'none';
+            }
+            if (mainContainer) {
+                mainContainer.style.display = 'flex';
+                mainContainer.classList.add('watching');
+            }
+            
             // Show loading in video panel
             this.videoPlayer.showLoading('Loading episode...');
             
@@ -383,6 +395,7 @@ export class SeriesApp {
         const fallbackLinkLarge = document.getElementById('fallbackLinkLarge');
         const fallbackUrlLarge = document.getElementById('fallbackUrlLarge');
         const videoInfoDetails = document.getElementById('videoInfoDetails');
+        const mainContainer = document.getElementById('mainContainer');
         
         // Cleanup any existing HLS player
         if (this.videoPlayer.hlsPlayer) {
@@ -397,13 +410,22 @@ export class SeriesApp {
         fallbackUrlLarge.textContent = videoUrl;
         fallbackLinkLarge.style.display = 'block';
         
-        // Show video panel
+        // Show video panel and ensure main container is in watching mode
+        if (mainContainer) {
+            mainContainer.classList.add('watching');
+        }
         videoPanel.style.display = 'flex';
         
         // Clear any errors
         const videoPanelError = document.getElementById('videoPanelError');
         if (videoPanelError) {
             videoPanelError.style.display = 'none';
+        }
+        
+        // Ensure video container is visible
+        const videoContainer = document.querySelector('.video-container-large');
+        if (videoContainer) {
+            videoContainer.style.display = 'flex';
         }
         
         // Set video source directly
