@@ -1,5 +1,15 @@
 # IPTV Player
 
+## ⚠️ Disclaimer
+
+**This project is developed mostly using vibe coding and Cursor Agents and Background Agents, with minimal real person intervention and code review, if any.**
+
+This project is merely an exercise of what is possible to create with LLMs, and demonstrates that while it's possible to deliver quickly, the codebase rapidly becomes too large to maintain. This highlights why it's important to use good AFSD (AI First Software Delivery) techniques to keep the source code maintainable and most importantly expandable and sustainable.
+
+**⚠️ Do not use this project source to gauge quality!**
+
+---
+
 IPTV Player is a web application for streaming and watching IPTV channels. It features a modular architecture following separation of concerns and best practices.
 
 ## Directory Structure
