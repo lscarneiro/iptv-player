@@ -42,8 +42,41 @@ export class SeriesInfoPanel {
         this.currentSeriesInfo = seriesInfo;
         
         const info = seriesInfo.info || {};
-        const seasons = seriesInfo.seasons || [];
+        let seasons = seriesInfo.seasons || [];
         const episodes = seriesInfo.episodes || {};
+
+        // If seasons array is empty but we have episodes, derive seasons from episodes
+        if (!seasons || seasons.length === 0) {
+            const seasonNumbers = new Set();
+            
+            // Collect season numbers from episode keys (can be strings or numbers)
+            Object.keys(episodes).forEach(key => {
+                const seasonNum = parseInt(key, 10);
+                if (!isNaN(seasonNum)) {
+                    seasonNumbers.add(seasonNum);
+                }
+            });
+            
+            // Also check episode objects for season field as fallback
+            Object.values(episodes).forEach(episodeArray => {
+                if (Array.isArray(episodeArray)) {
+                    episodeArray.forEach(episode => {
+                        if (episode.season !== undefined && episode.season !== null) {
+                            const seasonNum = parseInt(episode.season, 10);
+                            if (!isNaN(seasonNum)) {
+                                seasonNumbers.add(seasonNum);
+                            }
+                        }
+                    });
+                }
+            });
+            
+            // Create season objects from collected season numbers
+            seasons = Array.from(seasonNumbers).map(seasonNum => ({
+                season_number: seasonNum,
+                name: `Season ${seasonNum}`
+            }));
+        }
 
         // Get backdrop image
         const backdropUrl = info.backdrop_path && info.backdrop_path.length > 0 
@@ -93,7 +126,9 @@ export class SeriesInfoPanel {
         // Render seasons and episodes
         sortedSeasons.forEach(season => {
             const seasonNumber = season.season_number || 0;
-            const seasonEpisodes = episodes[seasonNumber] || [];
+            // Handle both string and numeric keys for episodes (JavaScript object keys are strings, but we handle both)
+            const seasonKey = String(seasonNumber);
+            const seasonEpisodes = episodes[seasonNumber] || episodes[seasonKey] || [];
             const episodeCount = seasonEpisodes.length;
 
             html += `
