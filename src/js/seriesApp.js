@@ -537,7 +537,12 @@ export class SeriesApp {
         // Hide video panel
         this.hideSeriesVideoPanel();
         
-        logger.log('Series video closed');
+        // Show the series detail panel again (return to episodes list)
+        if (this.seriesInfoPanel && this.seriesInfoPanel.currentSeriesInfo) {
+            this.seriesInfoPanel.show();
+        }
+        
+        logger.log('Series video closed - returned to episodes list');
     }
 
     handleSeriesFavoriteToggle(seriesId, isFavorite) {
