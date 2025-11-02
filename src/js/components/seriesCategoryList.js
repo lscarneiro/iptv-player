@@ -14,25 +14,11 @@ export class SeriesCategoryList {
     }
 
     render(categories, allSeriesCount = 0, favoritesCount = 0) {
-        // Group categories by prefix (before |)
-        const groups = {};
-        categories.forEach(category => {
-            const parts = category.category_name.split('|');
-            const prefix = parts[0].trim();
-            const name = parts[1] ? parts[1].trim() : category.category_name;
-            
-            if (!groups[prefix]) {
-                groups[prefix] = [];
-            }
-            
-            groups[prefix].push({
-                ...category,
-                displayName: name
-            });
-        });
-        
-        // Sort groups and categories within groups
-        const sortedGroups = Object.keys(groups).sort();
+        // Series/VOD categories don't use prefixes, so display them as a flat list
+        // Sort categories alphabetically
+        const sortedCategories = [...categories].sort((a, b) => 
+            a.category_name.localeCompare(b.category_name)
+        );
         
         let html = `
             <div class="category-group">
@@ -47,27 +33,11 @@ export class SeriesCategoryList {
             </div>
         `;
         
-        sortedGroups.forEach(groupName => {
-            const groupCategories = groups[groupName].sort((a, b) => 
-                a.displayName.localeCompare(b.displayName)
-            );
-            
+        // Add all categories as a flat list (no sections/grouping)
+        sortedCategories.forEach(category => {
             html += `
-                <div class="category-group-wrapper">
-                    <div class="category-group">
-                        <div class="group-header">${escapeHtml(groupName)}</div>
-            `;
-            
-            groupCategories.forEach(category => {
-                html += `
-                    <div class="category-item" data-category-id="${category.category_id}">
-                        <span>${escapeHtml(category.displayName)}</span>
-                    </div>
-                `;
-            });
-            
-            html += `
-                    </div>
+                <div class="category-item" data-category-id="${category.category_id}">
+                    <span>${escapeHtml(category.category_name)}</span>
                 </div>
             `;
         });
@@ -115,32 +85,22 @@ export class SeriesCategoryList {
 
     filter(searchTerm) {
         const items = this.container.querySelectorAll('.category-item');
-        const groups = this.container.querySelectorAll('.category-group');
         
         if (!searchTerm.trim()) {
             // Show all
-            groups.forEach(group => group.style.display = 'block');
             items.forEach(item => item.style.display = 'block');
             return;
         }
         
         const term = searchTerm.toLowerCase();
         
-        groups.forEach(group => {
-            const groupItems = group.querySelectorAll('.category-item');
-            let hasVisibleItems = false;
-            
-            groupItems.forEach(item => {
-                const text = item.textContent.toLowerCase();
-                if (text.includes(term)) {
-                    item.style.display = 'block';
-                    hasVisibleItems = true;
-                } else {
-                    item.style.display = 'none';
-                }
-            });
-            
-            group.style.display = hasVisibleItems ? 'block' : 'none';
+        items.forEach(item => {
+            const text = item.textContent.toLowerCase();
+            if (text.includes(term)) {
+                item.style.display = 'block';
+            } else {
+                item.style.display = 'none';
+            }
         });
     }
 }
