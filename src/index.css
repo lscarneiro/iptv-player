@@ -2569,13 +2569,29 @@ body.video-fullscreen .video-player-large {
     flex-shrink: 0;
 }
 
+.epg-channel-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
 .epg-channel-name {
     font-size: 0.9rem;
     font-weight: 500;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    flex: 1;
+}
+
+.epg-channel-stream-id {
+    font-size: 0.7rem;
+    color: #888;
+    margin-top: 0.2rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .epg-programmes-area {

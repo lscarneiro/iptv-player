@@ -260,12 +260,29 @@ export class EPGPanel {
 
     applyFilters() {
         let filtered = [...this.allChannels];
-        
         // Apply favorites filter if active
-        if (this.favoritesFilterActive && this.favoritesService) {
-            filtered = filtered.filter(channel => {
-                return channel.streamId && this.favoritesService.isFavorite(channel.streamId);
-            });
+        if (this.favoritesFilterActive) {
+            if (!this.favoritesService) {
+                logger.warn('[EPG Filter] Favorites service not available');
+                filtered = [];
+            } else {
+                filtered = filtered.filter(channel => {
+                    // Channel must have a streamId to be favoritable
+                    if (!channel.streamId) {
+                        return false;
+                    }
+                    
+                    // Channel must be favorited (using stream favorites, not series favorites)
+                    const isFavorite = this.favoritesService.isFavorite(channel.streamId);
+                    
+                    // Channel must have EPG data (programmes)
+                    const hasEPGData = channel.id && this.programmes[channel.id] && Array.isArray(this.programmes[channel.id]) && this.programmes[channel.id].length > 0;
+                    
+                    // Both conditions must be true
+                    if (isFavorite && hasEPGData) console.log('[EPG Filter] Channel:',{ channel: channel, isFavorite: isFavorite, hasEPGData: hasEPGData});
+                    return isFavorite && hasEPGData;
+                });
+            }
         }
         
         // Apply search filter if active
@@ -449,10 +466,16 @@ export class EPGPanel {
             
             const channelName = channel.displayName || channel.streamName || channel.id;
             const formattedName = formatStreamName(channelName);
+            const streamId = channel.streamId || '';
+            const epgId = channel.id || '';
+            const streamIdDisplay = streamId && epgId ? `${streamId} | ${epgId}` : (streamId || epgId || '');
             html += `
                 <div class="epg-channel-row" data-channel-id="${escapeHtml(channel.id)}" data-channel-index="${actualIndex}" style="height: ${this.rowHeight}px; min-height: ${this.rowHeight}px; max-height: ${this.rowHeight}px;">
                     ${iconHtml}
-                    <div class="epg-channel-name">${escapeHtml(formattedName)}</div>
+                    <div class="epg-channel-info">
+                        <div class="epg-channel-name">${escapeHtml(formattedName)}</div>
+                        ${streamIdDisplay ? `<div class="epg-channel-stream-id">${escapeHtml(streamIdDisplay)}</div>` : ''}
+                    </div>
                 </div>
             `;
         });

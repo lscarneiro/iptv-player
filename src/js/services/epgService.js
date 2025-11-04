@@ -52,6 +52,7 @@ export class EPGService {
 
             // Process channels - only keep ones that match our streams
             const channels = [];
+            const addedStreamIds = new Set(); // Track stream IDs to prevent duplicates
             const channelElements = xmlDoc.querySelectorAll('channel');
             let processedChannels = 0;
 
@@ -62,6 +63,12 @@ export class EPGService {
                 // Check if we have a stream with matching epg_channel_id
                 if (streamMap.has(channelId)) {
                     const stream = streamMap.get(channelId);
+                    
+                    // Skip if we've already added this stream ID (prevent duplicates)
+                    if (addedStreamIds.has(stream.stream_id)) {
+                        processedChannels++;
+                        continue;
+                    }
                     
                     const displayNameEl = channelEl.querySelector('display-name');
                     const iconEl = channelEl.querySelector('icon');
@@ -76,6 +83,7 @@ export class EPGService {
                     };
                     
                     channels.push(channel);
+                    addedStreamIds.add(stream.stream_id); // Mark this stream ID as added
                 }
 
                 processedChannels++;
@@ -168,25 +176,39 @@ export class EPGService {
                 progs.sort((a, b) => a.startDate - b.startDate);
             }
 
-            if (this.parsingProgress) {
-                this.parsingProgress({ stage: 'saving', message: 'Saving to cache...', progress: 95 });
-            }
-
             // Convert Map to object for storage (IndexedDB doesn't support Maps directly)
             const programmesObj = {};
             for (const [channelId, progs] of programmes.entries()) {
                 programmesObj[channelId] = progs;
             }
 
-            // Save to IndexedDB
-            await this.storageService.saveEPGData(channels, programmesObj);
+            // Final pass: Remove channels that have no programmes
+            const channelsWithProgrammes = channels.filter(channel => {
+                const hasProgrammes = programmesObj[channel.id] && programmesObj[channel.id].length > 0;
+                if (!hasProgrammes) {
+                    logger.log(`[EPG] Removing channel without programmes: ${channel.displayName || channel.id} (${channel.id})`);
+                }
+                return hasProgrammes;
+            });
+
+            const removedCount = channels.length - channelsWithProgrammes.length;
+            if (removedCount > 0) {
+                logger.log(`[EPG] Removed ${removedCount} channel(s) without programmes`);
+            }
+
+            if (this.parsingProgress) {
+                this.parsingProgress({ stage: 'saving', message: 'Saving to cache...', progress: 95 });
+            }
+
+            // Save to IndexedDB (only channels with programmes)
+            await this.storageService.saveEPGData(channelsWithProgrammes, programmesObj);
 
             if (this.parsingProgress) {
                 this.parsingProgress({ stage: 'complete', message: 'EPG data loaded', progress: 100 });
             }
 
             return {
-                channels,
+                channels: channelsWithProgrammes,
                 programmes: programmesObj
             };
 
