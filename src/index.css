@@ -2306,6 +2306,16 @@ body.video-fullscreen .video-player-large {
     font-size: 1.2rem;
     font-weight: 600;
     flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.epg-latest-end-time {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: #888;
+    margin-left: 0.5rem;
 }
 
 .epg-controls {

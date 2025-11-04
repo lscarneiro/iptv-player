@@ -693,6 +693,41 @@ export class EPGPanel {
         
         this.programmesContainer.scrollLeft = Math.max(0, scrollLeft);
     }
+
+    updateLatestEndTime(latestProgrammeEndTime) {
+        const titleElement = document.querySelector('.epg-title');
+        if (!titleElement) return;
+
+        if (latestProgrammeEndTime) {
+            const endDate = new Date(latestProgrammeEndTime);
+            const formattedDate = TimezoneUtils.formatTime(endDate, {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+            
+            // Remove existing end time span if present
+            const existingSpan = titleElement.querySelector('.epg-latest-end-time');
+            if (existingSpan) {
+                existingSpan.remove();
+            }
+            
+            // Add new end time span
+            const endTimeSpan = document.createElement('span');
+            endTimeSpan.className = 'epg-latest-end-time';
+            endTimeSpan.textContent = `Last available: ${formattedDate}`;
+            titleElement.appendChild(endTimeSpan);
+        } else {
+            // Remove end time span if no data
+            const existingSpan = titleElement.querySelector('.epg-latest-end-time');
+            if (existingSpan) {
+                existingSpan.remove();
+            }
+        }
+    }
 }
 
 

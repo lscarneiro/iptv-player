@@ -225,11 +225,12 @@ export class StorageService {
     }
 
     // EPG data management
-    async saveEPGData(channels, programmes) {
+    async saveEPGData(channels, programmes, latestProgrammeEndTime = null) {
         const epgData = {
             channels,
             programmes,
-            lastUpdated: Date.now()
+            lastUpdated: Date.now(),
+            latestProgrammeEndTime: latestProgrammeEndTime
         };
         return await this.saveToIndexedDB('epg', 'epg_data', epgData);
     }

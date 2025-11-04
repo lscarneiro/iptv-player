@@ -196,12 +196,32 @@ export class EPGService {
                 logger.log(`[EPG] Removed ${removedCount} channel(s) without programmes`);
             }
 
+            // Find the latest programme end time across all programmes
+            let latestProgrammeEndTime = null;
+            for (const [channelId, progs] of Object.entries(programmesObj)) {
+                if (progs && progs.length > 0) {
+                    // Programmes are already sorted by startDate, so the last one should have the latest end time
+                    // But we need to check all end times to be sure
+                    for (const prog of progs) {
+                        const endTime = prog.stopDate; // This is already a timestamp from getTime()
+                        if (!latestProgrammeEndTime || endTime > latestProgrammeEndTime) {
+                            latestProgrammeEndTime = endTime;
+                        }
+                    }
+                }
+            }
+
+            if (latestProgrammeEndTime) {
+                const latestEndDate = new Date(latestProgrammeEndTime);
+                logger.log(`[EPG] Latest programme end time: ${latestEndDate.toISOString()}`);
+            }
+
             if (this.parsingProgress) {
                 this.parsingProgress({ stage: 'saving', message: 'Saving to cache...', progress: 95 });
             }
 
             // Save to IndexedDB (only channels with programmes)
-            await this.storageService.saveEPGData(channelsWithProgrammes, programmesObj);
+            await this.storageService.saveEPGData(channelsWithProgrammes, programmesObj, latestProgrammeEndTime);
 
             if (this.parsingProgress) {
                 this.parsingProgress({ stage: 'complete', message: 'EPG data loaded', progress: 100 });
@@ -209,7 +229,8 @@ export class EPGService {
 
             return {
                 channels: channelsWithProgrammes,
-                programmes: programmesObj
+                programmes: programmesObj,
+                latestProgrammeEndTime: latestProgrammeEndTime
             };
 
         } catch (error) {
@@ -250,6 +271,14 @@ export class EPGService {
             return [];
         }
         return epgData.programmes[channelId] || [];
+    }
+
+    async getLatestProgrammeEndTime() {
+        const epgData = await this.getEPGData();
+        if (!epgData || !epgData.latestProgrammeEndTime) {
+            return null;
+        }
+        return epgData.latestProgrammeEndTime;
     }
 
     async getAllProgrammes() {

@@ -891,6 +891,8 @@ export class IPTVApp {
                     // Render cached data
                     this.epgPanel.render(epgData.channels, epgData.programmes || {});
                     this.epgPanel.scrollToCurrentTime();
+                    // Update latest end time display
+                    this.epgPanel.updateLatestEndTime(epgData.latestProgrammeEndTime);
                     return;
                 }
             }
@@ -911,6 +913,8 @@ export class IPTVApp {
             if (epgData && epgData.channels) {
                 this.epgPanel.render(epgData.channels, epgData.programmes || {});
                 this.epgPanel.scrollToCurrentTime();
+                // Update latest end time display
+                this.epgPanel.updateLatestEndTime(epgData.latestProgrammeEndTime);
             } else {
                 this.epgPanel.showError('No EPG data available for your channels');
             }
