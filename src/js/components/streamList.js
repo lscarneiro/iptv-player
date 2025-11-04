@@ -23,6 +23,51 @@ export class StreamList {
         this.setupInfiniteScroll();
     }
 
+    buildStreamItemHtml(stream, playingClass, isFavorite, starClass, starIcon) {
+        const iconHtml = stream.stream_icon ? 
+            `<img src="${escapeHtml(stream.stream_icon)}" class="stream-icon" alt="Channel icon" onerror="this.style.display='none'">` : 
+            '<div class="stream-icon" style="background-color: #404040;"></div>';
+        
+        // Build tags for catchup and EPG
+        let tagsHtml = '';
+        const tags = [];
+        
+        // Catchup tag
+        if (stream.tv_archive && stream.tv_archive !== 0 && stream.tv_archive_duration) {
+            tags.push(`<span class="stream-tag stream-tag-catchup">Catchup: ${stream.tv_archive_duration}h</span>`);
+        }
+        
+        // EPG tag
+        if (stream.epg_channel_id && stream.epg_channel_id.trim() !== '') {
+            tags.push(`<span class="stream-tag stream-tag-epg">EPG</span>`);
+        }
+        
+        if (tags.length > 0) {
+            tagsHtml = `<div class="stream-tags">${tags.join('')}</div>`;
+        }
+        
+        return `
+            <div class="stream-item clickable-stream ${playingClass}" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
+                ${iconHtml}
+                <div class="stream-info">
+                    <div class="stream-name">${escapeHtml(stream.name)}</div>
+                    <div class="stream-id-row">
+                        <span class="stream-id">ID: ${stream.stream_id}</span>
+                        ${tagsHtml}
+                    </div>
+                </div>
+                <div class="stream-actions">
+                    <button class="${starClass}" data-stream-id="${stream.stream_id}" title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">
+                        ${starIcon}
+                    </button>
+                    <button class="watch-btn" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
+                        ${playingClass ? 'Now Playing' : 'Watch'}
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
     setupInfiniteScroll() {
         // The container itself is the scrollable area
         const contentArea = this.container;
@@ -192,10 +237,6 @@ export class StreamList {
         
         let html = '';
         visibleItems.forEach(stream => {
-            const iconHtml = stream.stream_icon ? 
-                `<img src="${escapeHtml(stream.stream_icon)}" class="stream-icon" alt="Channel icon" onerror="this.style.display='none'">` : 
-                '<div class="stream-icon" style="background-color: #404040;"></div>';
-            
             // Add playing class if this is the currently playing stream
             const playingClass = this.currentPlayingStreamId === stream.stream_id ? 'playing' : '';
             
@@ -204,23 +245,7 @@ export class StreamList {
             const starClass = isFavorite ? 'favorite-star favorited' : 'favorite-star';
             const starIcon = isFavorite ? '★' : '☆';
             
-            html += `
-                <div class="stream-item clickable-stream ${playingClass}" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
-                    ${iconHtml}
-                    <div class="stream-info">
-                        <div class="stream-name">${escapeHtml(stream.name)}</div>
-                        <div class="stream-id">ID: ${stream.stream_id}</div>
-                    </div>
-                    <div class="stream-actions">
-                        <button class="${starClass}" data-stream-id="${stream.stream_id}" title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">
-                            ${starIcon}
-                        </button>
-                        <button class="watch-btn" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
-                            ${playingClass ? 'Now Playing' : 'Watch'}
-                        </button>
-                    </div>
-                </div>
-            `;
+            html += this.buildStreamItemHtml(stream, playingClass, isFavorite, starClass, starIcon);
         });
         
         // Add loading indicator if there are more items and we're loading
@@ -256,7 +281,13 @@ export class StreamList {
         this.container.querySelectorAll('.clickable-stream').forEach(item => {
             item.addEventListener('click', () => {
                 if (this.onWatchStream) {
-                    this.onWatchStream(item.dataset.streamId, item.dataset.streamName);
+                    const streamId = item.dataset.streamId;
+                    const streamName = item.dataset.streamName;
+                    // Find the stream object to get catchup info
+                    const stream = this.allStreams.find(s => s.stream_id == streamId);
+                    const tvArchive = stream ? stream.tv_archive : null;
+                    const tvArchiveDuration = stream ? stream.tv_archive_duration : null;
+                    this.onWatchStream(streamId, streamName, tvArchive, tvArchiveDuration);
                 }
             });
         });
@@ -276,10 +307,6 @@ export class StreamList {
         
         let html = '';
         additionalItems.forEach(stream => {
-            const iconHtml = stream.stream_icon ? 
-                `<img src="${escapeHtml(stream.stream_icon)}" class="stream-icon" alt="Channel icon" onerror="this.style.display='none'">` : 
-                '<div class="stream-icon" style="background-color: #404040;"></div>';
-            
             const playingClass = this.currentPlayingStreamId === stream.stream_id ? 'playing' : '';
             
             // Check if stream is favorited
@@ -287,23 +314,7 @@ export class StreamList {
             const starClass = isFavorite ? 'favorite-star favorited' : 'favorite-star';
             const starIcon = isFavorite ? '★' : '☆';
             
-            html += `
-                <div class="stream-item clickable-stream ${playingClass}" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
-                    ${iconHtml}
-                    <div class="stream-info">
-                        <div class="stream-name">${escapeHtml(stream.name)}</div>
-                        <div class="stream-id">ID: ${stream.stream_id}</div>
-                    </div>
-                    <div class="stream-actions">
-                        <button class="${starClass}" data-stream-id="${stream.stream_id}" title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">
-                            ${starIcon}
-                        </button>
-                        <button class="watch-btn" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
-                            ${playingClass ? 'Now Playing' : 'Watch'}
-                        </button>
-                    </div>
-                </div>
-            `;
+            html += this.buildStreamItemHtml(stream, playingClass, isFavorite, starClass, starIcon);
         });
         
         // Remove any existing loading indicator
@@ -330,7 +341,13 @@ export class StreamList {
                 watchBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     if (this.onWatchStream) {
-                        this.onWatchStream(watchBtn.dataset.streamId, watchBtn.dataset.streamName);
+                        const streamId = watchBtn.dataset.streamId;
+                        const streamName = watchBtn.dataset.streamName;
+                        // Find the stream object to get catchup info
+                        const stream = this.allStreams.find(s => s.stream_id == streamId);
+                        const tvArchive = stream ? stream.tv_archive : null;
+                        const tvArchiveDuration = stream ? stream.tv_archive_duration : null;
+                        this.onWatchStream(streamId, streamName, tvArchive, tvArchiveDuration);
                     }
                 });
             }
@@ -345,7 +362,13 @@ export class StreamList {
             
             item.addEventListener('click', () => {
                 if (this.onWatchStream) {
-                    this.onWatchStream(item.dataset.streamId, item.dataset.streamName);
+                    const streamId = item.dataset.streamId;
+                    const streamName = item.dataset.streamName;
+                    // Find the stream object to get catchup info
+                    const stream = this.allStreams.find(s => s.stream_id == streamId);
+                    const tvArchive = stream ? stream.tv_archive : null;
+                    const tvArchiveDuration = stream ? stream.tv_archive_duration : null;
+                    this.onWatchStream(streamId, streamName, tvArchive, tvArchiveDuration);
                 }
             });
         });
@@ -376,10 +399,6 @@ export class StreamList {
         
         let html = '';
         visibleItems.forEach(stream => {
-            const iconHtml = stream.stream_icon ? 
-                `<img src="${escapeHtml(stream.stream_icon)}" class="stream-icon" alt="Channel icon" onerror="this.style.display='none'">` : 
-                '<div class="stream-icon" style="background-color: #404040;"></div>';
-            
             const playingClass = this.currentPlayingStreamId === stream.stream_id ? 'playing' : '';
             
             // Check if stream is favorited
@@ -387,23 +406,7 @@ export class StreamList {
             const starClass = isFavorite ? 'favorite-star favorited' : 'favorite-star';
             const starIcon = isFavorite ? '★' : '☆';
             
-            html += `
-                <div class="stream-item clickable-stream ${playingClass}" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
-                    ${iconHtml}
-                    <div class="stream-info">
-                        <div class="stream-name">${escapeHtml(stream.name)}</div>
-                        <div class="stream-id">ID: ${stream.stream_id}</div>
-                    </div>
-                    <div class="stream-actions">
-                        <button class="${starClass}" data-stream-id="${stream.stream_id}" title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">
-                            ${starIcon}
-                        </button>
-                        <button class="watch-btn" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
-                            ${playingClass ? 'Now Playing' : 'Watch'}
-                        </button>
-                    </div>
-                </div>
-            `;
+            html += this.buildStreamItemHtml(stream, playingClass, isFavorite, starClass, starIcon);
         });
         
         // Add loading indicator if there are more items and we're loading
@@ -422,7 +425,13 @@ export class StreamList {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (this.onWatchStream) {
-                    this.onWatchStream(btn.dataset.streamId, btn.dataset.streamName);
+                    const streamId = btn.dataset.streamId;
+                    const streamName = btn.dataset.streamName;
+                    // Find the stream object to get catchup info
+                    const stream = this.allStreams.find(s => s.stream_id == streamId);
+                    const tvArchive = stream ? stream.tv_archive : null;
+                    const tvArchiveDuration = stream ? stream.tv_archive_duration : null;
+                    this.onWatchStream(streamId, streamName, tvArchive, tvArchiveDuration);
                 }
             });
         });
@@ -438,7 +447,13 @@ export class StreamList {
         this.container.querySelectorAll('.clickable-stream').forEach(item => {
             item.addEventListener('click', () => {
                 if (this.onWatchStream) {
-                    this.onWatchStream(item.dataset.streamId, item.dataset.streamName);
+                    const streamId = item.dataset.streamId;
+                    const streamName = item.dataset.streamName;
+                    // Find the stream object to get catchup info
+                    const stream = this.allStreams.find(s => s.stream_id == streamId);
+                    const tvArchive = stream ? stream.tv_archive : null;
+                    const tvArchiveDuration = stream ? stream.tv_archive_duration : null;
+                    this.onWatchStream(streamId, streamName, tvArchive, tvArchiveDuration);
                 }
             });
         });

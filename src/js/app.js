@@ -76,8 +76,8 @@ export class IPTVApp {
             this.handleCategorySelect(categoryId);
         });
         
-        this.streamList.setOnWatchStream((streamId, streamName) => {
-            this.handleWatchStream(streamId, streamName);
+        this.streamList.setOnWatchStream((streamId, streamName, tvArchive, tvArchiveDuration) => {
+            this.handleWatchStream(streamId, streamName, tvArchive, tvArchiveDuration);
         });
 
         // Set up favorites service connections
@@ -699,7 +699,7 @@ export class IPTVApp {
     }
 
     // Video Player
-    async handleWatchStream(streamId, streamName) {
+    async handleWatchStream(streamId, streamName, tvArchive, tvArchiveDuration) {
         try {
             // Update stream highlighting
             this.streamList.highlightPlayingStream(streamId);
@@ -715,7 +715,7 @@ export class IPTVApp {
                 throw new Error('No valid stream URL found in response');
             }
             
-            this.videoPlayer.playStream(streamUrl, streamName, streamId);
+            this.videoPlayer.playStream(streamUrl, streamName, streamId, tvArchive, tvArchiveDuration);
             
             // Notify mobile navigation
             this.mobileNav.onStreamStarted();
@@ -954,8 +954,13 @@ export class IPTVApp {
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
 
+            // Find the stream object to get catchup info
+            const stream = this.streamList.allStreams.find(s => s.stream_id == streamId);
+            const tvArchive = stream ? stream.tv_archive : null;
+            const tvArchiveDuration = stream ? stream.tv_archive_duration : null;
+
             // Load and play the stream
-            await this.handleWatchStream(streamId, streamName);
+            await this.handleWatchStream(streamId, streamName, tvArchive, tvArchiveDuration);
 
         } catch (error) {
             logger.error('EPG channel click error:', error);

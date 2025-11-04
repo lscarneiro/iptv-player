@@ -37,6 +37,8 @@ export class VideoPlayer {
         this.lastStreamStats = null;
         this.favoritesService = null;
         this.onFavoriteToggle = null;
+        this.currentTvArchive = null;
+        this.currentTvArchiveDuration = null;
         
         // Setup fullscreen handlers only once
         if (!VideoPlayer.handlersInitialized) {
@@ -226,6 +228,12 @@ export class VideoPlayer {
             items.push(`<span class="stat-item"><strong>Buffer:</strong> ${stats.buffered}</span>`);
         }
 
+        // Show catchup information if tv_archive is enabled (not 0)
+        if (this.currentTvArchive && this.currentTvArchive !== 0 && this.currentTvArchiveDuration) {
+            const duration = this.currentTvArchiveDuration;
+            items.push(`<span class="stat-item"><strong>Catchup:</strong> Enabled (${duration} hours)</span>`);
+        }
+
         return items.length > 0 ? items.join(' • ') : 'Loading stream information...';
     }
 
@@ -309,7 +317,7 @@ export class VideoPlayer {
         }
     }
 
-    playStream(streamUrl, streamName, streamId) {
+    playStream(streamUrl, streamName, streamId, tvArchive, tvArchiveDuration) {
         const videoLarge = document.getElementById('videoPlayerLarge');
         const playerSection = document.getElementById('playerSection');
         const videoPanel = document.getElementById('videoPanel');
@@ -336,6 +344,8 @@ export class VideoPlayer {
         this.currentStreamUrl = streamUrl;
         this.currentStreamName = streamName;
         this.currentStreamId = streamId;
+        this.currentTvArchive = tvArchive;
+        this.currentTvArchiveDuration = tvArchiveDuration;
         this.playbackStarted = false;
         this.streamEndDetected = false;
         this.fragmentErrors = [];
@@ -1412,6 +1422,8 @@ export class VideoPlayer {
         this.currentStreamUrl = null;
         this.currentStreamName = null;
         this.currentStreamId = null;
+        this.currentTvArchive = null;
+        this.currentTvArchiveDuration = null;
         this.playbackStarted = false;
         this.retryManager.reset();
         this.streamEndDetected = false;
@@ -1912,6 +1924,8 @@ export class VideoPlayer {
         this.currentStreamUrl = null;
         this.currentStreamName = null;
         this.currentStreamId = null;
+        this.currentTvArchive = null;
+        this.currentTvArchiveDuration = null;
         this.playbackStarted = false;
         this.mediaErrorCount = 0;
         this.unsupportedFormatDetected = false;

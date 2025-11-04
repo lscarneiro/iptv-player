@@ -1160,11 +1160,50 @@ body {
     line-height: 1.4;
 }
 
+.stream-id-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-height: 1.5rem;
+}
+
 .stream-id {
     font-size: 0.8rem;
     color: #888;
     word-wrap: break-word;
     overflow-wrap: break-word;
+    flex: 0 0 auto;
+    min-width: 120px; /* Reserve space for long IDs to keep alignment */
+}
+
+.stream-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    flex: 0 0 auto;
+    align-items: center;
+}
+
+.stream-tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.stream-tag-catchup {
+    background-color: rgba(76, 175, 80, 0.2);
+    color: #4caf50;
+    border: 1px solid rgba(76, 175, 80, 0.4);
+}
+
+.stream-tag-epg {
+    background-color: rgba(0, 122, 204, 0.2);
+    color: #007acc;
+    border: 1px solid rgba(0, 122, 204, 0.4);
 }
 
 .stream-icon {
