@@ -1,6 +1,6 @@
 // Stream List Component
 
-import { escapeHtml } from '../utils/domHelpers.js';
+import { escapeHtml, formatStreamName } from '../utils/domHelpers.js';
 import { logger } from '../utils/logger.js';
 
 export class StreamList {
@@ -46,11 +46,12 @@ export class StreamList {
             tagsHtml = `<div class="stream-tags">${tags.join('')}</div>`;
         }
         
+        const formattedName = formatStreamName(stream.name);
         return `
             <div class="stream-item clickable-stream ${playingClass}" data-stream-id="${stream.stream_id}" data-stream-name="${escapeHtml(stream.name)}">
                 ${iconHtml}
                 <div class="stream-info">
-                    <div class="stream-name">${escapeHtml(stream.name)}</div>
+                    <div class="stream-name">${escapeHtml(formattedName)}</div>
                     <div class="stream-id-row">
                         <span class="stream-id">ID: ${stream.stream_id}</span>
                         ${tagsHtml}

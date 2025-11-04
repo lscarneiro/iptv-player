@@ -1,7 +1,7 @@
 // EPG Panel Component - TV guide grid display
 
 import { TimezoneUtils } from '../utils/timezoneUtils.js';
-import { escapeHtml } from '../utils/domHelpers.js';
+import { escapeHtml, formatStreamName } from '../utils/domHelpers.js';
 import { logger } from '../utils/logger.js';
 
 export class EPGPanel {
@@ -447,10 +447,12 @@ export class EPGPanel {
                 `<img src="${escapeHtml(channel.icon)}" class="epg-channel-icon" alt="${escapeHtml(channel.displayName)}" onerror="this.style.display='none'">` : 
                 '<div class="epg-channel-icon" style="background-color: #404040;"></div>';
             
+            const channelName = channel.displayName || channel.streamName || channel.id;
+            const formattedName = formatStreamName(channelName);
             html += `
                 <div class="epg-channel-row" data-channel-id="${escapeHtml(channel.id)}" data-channel-index="${actualIndex}" style="height: ${this.rowHeight}px; min-height: ${this.rowHeight}px; max-height: ${this.rowHeight}px;">
                     ${iconHtml}
-                    <div class="epg-channel-name">${escapeHtml(channel.displayName || channel.streamName || channel.id)}</div>
+                    <div class="epg-channel-name">${escapeHtml(formattedName)}</div>
                 </div>
             `;
         });

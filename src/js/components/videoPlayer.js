@@ -1,6 +1,6 @@
 // Video Player Component
 
-import { escapeHtml } from '../utils/domHelpers.js';
+import { escapeHtml, formatStreamName } from '../utils/domHelpers.js';
 import { RetryManager } from './retryManager.js';
 import { BufferingManager } from './bufferingManager.js';
 import { TimezoneUtils } from '../utils/timezoneUtils.js';
@@ -361,8 +361,9 @@ export class VideoPlayer {
         this.lastStreamStats = null; // Reset stats comparison
         
         // Update UI
-        playerTitle.textContent = streamName;
-        videoPanelTitle.textContent = streamName;
+        const formattedName = formatStreamName(streamName);
+        playerTitle.textContent = formattedName;
+        videoPanelTitle.textContent = formattedName;
         videoInfoDetails.innerHTML = '<span class="stat-item">Loading stream information...</span>';
         
         fallbackUrl.href = streamUrl;

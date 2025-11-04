@@ -53,3 +53,14 @@ export function scrollToTop(element) {
     }
 }
 
+// Format stream name by replacing ◉ with red circle emoji (but not if it's at the beginning)
+export function formatStreamName(name) {
+    if (!name) return '';
+    // If it starts with ◉, keep it and only replace the rest
+    if (name.startsWith('◉')) {
+        return '◉' + name.slice(1).replace(/◉/g, '🔴');
+    }
+    // Otherwise replace all occurrences
+    return name.replace(/◉/g, '🔴');
+}
+
