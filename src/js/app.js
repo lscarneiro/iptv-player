@@ -93,9 +93,20 @@ export class IPTVApp {
         this.videoPlayer.setApiService(this.apiService);
         this.videoPlayer.setEpgService(this.epgService);
 
+        // Set up category list favorites service
+        this.categoryList.setFavoritesService(this.favoritesService);
+        this.categoryList.setOnCategoryFavoriteToggle((categoryId, isFavorite) => {
+            this.handleCategoryFavoriteToggle(categoryId, isFavorite);
+        });
+
         // Set up favorites change listener
         this.favoritesService.setOnFavoriteChange((streamId, isFavorite) => {
             this.handleFavoriteChange(streamId, isFavorite);
+        });
+
+        // Set up category favorites change listener
+        this.favoritesService.setOnCategoryFavoriteChange((categoryId, isFavorite) => {
+            this.handleCategoryFavoriteChange(categoryId, isFavorite);
         });
         
         this.settingsPanel.setOnSubmit((serverUrl, username, password) => {
@@ -591,19 +602,6 @@ export class IPTVApp {
             });
             await this.storageService.saveToIndexedDB('streams', cacheKey, sortedStreams);
             
-            // Update UI count if element still exists
-            const nameSpan = categoryItem.querySelector('span:first-child');
-            if (nameSpan) {
-                // Remove any existing count span first
-                const existingCount = categoryItem.querySelector('.category-count');
-                if (existingCount) {
-                    existingCount.remove();
-                }
-                // Insert new count span
-                const countHtml = `<span class="category-count">(${count})</span>`;
-                nameSpan.insertAdjacentHTML('afterend', countHtml);
-            }
-            
             // Update category metadata
             const category = this.categories.find(c => c.category_id === categoryId);
             if (category) {
@@ -611,6 +609,30 @@ export class IPTVApp {
             }
             
             await this.storageService.saveToIndexedDB('categories', 'live_categories', this.categories);
+            
+            // Re-render category list to show updated count
+            if (this.categories && this.categories.length > 0) {
+                let allChannelsCount = 0;
+                try {
+                    const allChannelsItem = document.querySelector('[data-category-id="all"] .category-count');
+                    if (allChannelsItem) {
+                        const match = allChannelsItem.textContent.match(/\((\d+)\)/);
+                        if (match) {
+                            allChannelsCount = parseInt(match[1], 10);
+                        }
+                    }
+                } catch (e) {
+                    // Ignore errors
+                }
+                
+                const favoritesCount = this.favoritesService.getFavoriteCount();
+                this.categoryList.render(this.categories, allChannelsCount, favoritesCount);
+                
+                // Restore selection if a category was selected
+                if (this.currentCategory) {
+                    this.categoryList.selectCategory(this.currentCategory);
+                }
+            }
             
         } catch (error) {
             logger.error('Failed to get category count:', error);
@@ -657,6 +679,38 @@ export class IPTVApp {
                     // Always cache the data
                     await this.storageService.saveToIndexedDB('streams', cacheKey, sortedStreams);
                     streams = sortedStreams;
+                    
+                    // Update category count if not "all"
+                    if (categoryId !== 'all') {
+                        const count = streams.length;
+                        const category = this.categories.find(c => c.category_id === categoryId);
+                        if (category) {
+                            category.stream_count = count;
+                            await this.storageService.saveToIndexedDB('categories', 'live_categories', this.categories);
+                            
+                            // Re-render category list to show updated count
+                            let allChannelsCount = 0;
+                            try {
+                                const allChannelsItem = document.querySelector('[data-category-id="all"] .category-count');
+                                if (allChannelsItem) {
+                                    const match = allChannelsItem.textContent.match(/\((\d+)\)/);
+                                    if (match) {
+                                        allChannelsCount = parseInt(match[1], 10);
+                                    }
+                                }
+                            } catch (e) {
+                                // Ignore errors
+                            }
+                            
+                            const favoritesCount = this.favoritesService.getFavoriteCount();
+                            this.categoryList.render(this.categories, allChannelsCount, favoritesCount);
+                            
+                            // Restore selection
+                            if (this.currentCategory) {
+                                this.categoryList.selectCategory(this.currentCategory);
+                            }
+                        }
+                    }
                 }
             }
             
@@ -826,6 +880,42 @@ export class IPTVApp {
             setTimeout(() => {
                 this.loadFavoriteStreams();
             }, 100);
+        }
+    }
+
+    handleCategoryFavoriteToggle(categoryId, isFavorite) {
+        // This is called when a category favorite is toggled from category list
+        // The favorites service will handle the actual toggle and notify all listeners
+        logger.log(`Category ${categoryId} favorite status changed to: ${isFavorite}`);
+    }
+
+    handleCategoryFavoriteChange(categoryId, isFavorite) {
+        // This is called by the favorites service when any category favorite changes
+        // Update UI elements that need to reflect the change
+        logger.log(`handleCategoryFavoriteChange: Category ${categoryId} favorite status changed to ${isFavorite}`);
+        
+        // Re-render category list to update Favorite Categories section
+        if (this.categories && this.categories.length > 0) {
+            let allChannelsCount = 0;
+            try {
+                const favoritesItem = document.querySelector('[data-category-id="all"] .category-count');
+                if (favoritesItem) {
+                    const match = favoritesItem.textContent.match(/\((\d+)\)/);
+                    if (match) {
+                        allChannelsCount = parseInt(match[1], 10);
+                    }
+                }
+            } catch (e) {
+                // Ignore errors
+            }
+            
+            const favoritesCount = this.favoritesService.getFavoriteCount();
+            this.categoryList.render(this.categories, allChannelsCount, favoritesCount);
+            
+            // Restore selection if a category was selected
+            if (this.currentCategory) {
+                this.categoryList.selectCategory(this.currentCategory);
+            }
         }
     }
 

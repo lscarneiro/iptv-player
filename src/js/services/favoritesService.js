@@ -7,8 +7,10 @@ export class FavoritesService {
         this.storageService = storageService;
         this.favorites = new Set(); // Stream favorites
         this.seriesFavorites = new Set(); // Series favorites
+        this.categoryFavorites = new Set(); // Category favorites
         this.onFavoriteChange = null; // Callback for when favorites change
         this.onSeriesFavoriteChange = null; // Callback for when series favorites change
+        this.onCategoryFavoriteChange = null; // Callback for when category favorites change
     }
 
     // Initialize favorites from storage
@@ -65,6 +67,34 @@ export class FavoritesService {
                     }
                 } catch (e) {
                     logger.warn('Failed to parse series favorites from localStorage:', e);
+                }
+            }
+        }
+
+        // Load category favorites
+        try {
+            const savedCategoryFavorites = await this.storageService.getFromIndexedDB('favorites', 'favorite_categories');
+            if (savedCategoryFavorites && Array.isArray(savedCategoryFavorites)) {
+                // Normalize all loaded IDs to strings
+                const normalizedFavorites = savedCategoryFavorites.map(id => String(id));
+                this.categoryFavorites = new Set(normalizedFavorites);
+                logger.log('Category favorites loaded from IndexedDB:', Array.from(this.categoryFavorites));
+            }
+        } catch (error) {
+            logger.warn('Failed to load category favorites from IndexedDB:', error);
+            // Fallback to localStorage
+            const fallbackFavorites = localStorage.getItem('favorite_categories');
+            if (fallbackFavorites) {
+                try {
+                    const parsed = JSON.parse(fallbackFavorites);
+                    if (Array.isArray(parsed)) {
+                        // Normalize all loaded IDs to strings
+                        const normalizedFavorites = parsed.map(id => String(id));
+                        this.categoryFavorites = new Set(normalizedFavorites);
+                        logger.log('Category favorites loaded from localStorage:', Array.from(this.categoryFavorites));
+                    }
+                } catch (e) {
+                    logger.warn('Failed to parse category favorites from localStorage:', e);
                 }
             }
         }
@@ -250,6 +280,90 @@ export class FavoritesService {
         await this.saveSeriesFavorites();
         if (this.onSeriesFavoriteChange) {
             this.onSeriesFavoriteChange(null, false); // Signal all series favorites cleared
+        }
+    }
+
+    // Category favorites methods
+
+    setOnCategoryFavoriteChange(callback) {
+        this.onCategoryFavoriteChange = callback;
+    }
+
+    isCategoryFavorite(categoryId) {
+        // Normalize to string to handle type mismatches
+        const normalizedId = String(categoryId);
+        return this.categoryFavorites.has(normalizedId);
+    }
+
+    async addCategoryFavorite(categoryId) {
+        // Normalize to string to handle type mismatches
+        const normalizedId = String(categoryId);
+        if (!this.categoryFavorites.has(normalizedId)) {
+            this.categoryFavorites.add(normalizedId);
+            await this.saveCategoryFavorites();
+            this.notifyCategoryChange(normalizedId, true);
+        }
+    }
+
+    async removeCategoryFavorite(categoryId) {
+        // Normalize to string to handle type mismatches
+        const normalizedId = String(categoryId);
+        if (this.categoryFavorites.has(normalizedId)) {
+            this.categoryFavorites.delete(normalizedId);
+            await this.saveCategoryFavorites();
+            this.notifyCategoryChange(normalizedId, false);
+        }
+    }
+
+    async toggleCategoryFavorite(categoryId) {
+        if (this.isCategoryFavorite(categoryId)) {
+            await this.removeCategoryFavorite(categoryId);
+            return false;
+        } else {
+            await this.addCategoryFavorite(categoryId);
+            return true;
+        }
+    }
+
+    getCategoryFavorites() {
+        return Array.from(this.categoryFavorites);
+    }
+
+    getCategoryFavoriteCount() {
+        return this.categoryFavorites.size;
+    }
+
+    filterFavoriteCategories(categories) {
+        if (!categories || !Array.isArray(categories)) {
+            return [];
+        }
+        return categories.filter(c => this.isCategoryFavorite(c.category_id));
+    }
+
+    async saveCategoryFavorites() {
+        const favoritesArray = Array.from(this.categoryFavorites);
+        
+        try {
+            // Try IndexedDB first
+            await this.storageService.saveToIndexedDB('favorites', 'favorite_categories', favoritesArray);
+        } catch (error) {
+            logger.warn('Failed to save category favorites to IndexedDB, using localStorage:', error);
+            // Fallback to localStorage
+            localStorage.setItem('favorite_categories', JSON.stringify(favoritesArray));
+        }
+    }
+
+    notifyCategoryChange(categoryId, isFavorite) {
+        if (this.onCategoryFavoriteChange) {
+            this.onCategoryFavoriteChange(categoryId, isFavorite);
+        }
+    }
+
+    async clearAllCategoryFavorites() {
+        this.categoryFavorites.clear();
+        await this.saveCategoryFavorites();
+        if (this.onCategoryFavoriteChange) {
+            this.onCategoryFavoriteChange(null, false); // Signal all category favorites cleared
         }
     }
 }
