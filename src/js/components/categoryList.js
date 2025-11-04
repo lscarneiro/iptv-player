@@ -124,9 +124,9 @@ export class CategoryList {
         const groups = this.container.querySelectorAll('.category-group');
         
         if (!searchTerm.trim()) {
-            // Show all
-            groups.forEach(group => group.style.display = 'block');
-            items.forEach(item => item.style.display = 'block');
+            // Show all - remove inline display styles to restore CSS flex layout
+            groups.forEach(group => group.style.display = '');
+            items.forEach(item => item.style.display = '');
             return;
         }
         
@@ -139,7 +139,7 @@ export class CategoryList {
             groupItems.forEach(item => {
                 const text = item.textContent.toLowerCase();
                 if (text.includes(term)) {
-                    item.style.display = 'block';
+                    item.style.display = 'flex'; // Use 'flex' to maintain flexbox layout
                     hasVisibleItems = true;
                 } else {
                     item.style.display = 'none';

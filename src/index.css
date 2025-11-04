@@ -1107,8 +1107,9 @@ body {
 .category-count {
     color: #bbb;
     font-size: 0.85rem;
-    margin-left: 0.5rem;
+    margin-left: auto;
     font-weight: 500;
+    flex-shrink: 0;
 }
 
 .category-item.selected .category-count {

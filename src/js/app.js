@@ -594,6 +594,12 @@ export class IPTVApp {
             // Update UI count if element still exists
             const nameSpan = categoryItem.querySelector('span:first-child');
             if (nameSpan) {
+                // Remove any existing count span first
+                const existingCount = categoryItem.querySelector('.category-count');
+                if (existingCount) {
+                    existingCount.remove();
+                }
+                // Insert new count span
                 const countHtml = `<span class="category-count">(${count})</span>`;
                 nameSpan.insertAdjacentHTML('afterend', countHtml);
             }
