@@ -16,6 +16,7 @@ import { debounce } from './utils/debounce.js';
 import { toggleClearButton } from './utils/domHelpers.js';
 import { logger } from './utils/logger.js';
 import { SeriesApp } from './seriesApp.js';
+import { VodApp } from './vodApp.js';
 
 export class IPTVApp {
     constructor() {
@@ -37,7 +38,9 @@ export class IPTVApp {
         
         // Series app (lazy loaded)
         this.seriesApp = null;
-        this.currentView = 'live'; // 'live' or 'series'
+        // VOD app (lazy loaded)
+        this.vodApp = null;
+        this.currentView = 'live'; // 'live', 'series', or 'movies'
         
         this.init();
     }
@@ -142,9 +145,19 @@ export class IPTVApp {
         // Settings panel
         this.settingsPanel.setupEventListeners();
         
-        // Series toggle
+        // Live TV button
+        document.getElementById('liveTvToggle').addEventListener('click', () => {
+            this.showLiveView();
+        });
+        
+        // Series button
         document.getElementById('seriesToggle').addEventListener('click', () => {
-            this.toggleView();
+            this.showSeriesView();
+        });
+        
+        // Movies button
+        document.getElementById('moviesToggle').addEventListener('click', () => {
+            this.showMoviesView();
         });
         
         // Account panel
@@ -1072,6 +1085,10 @@ export class IPTVApp {
     showMainInterface() {
         document.getElementById('mainContainer').style.display = 'flex';
         
+        // Set Live TV as active view
+        this.currentView = 'live';
+        this.updateViewButtonStates('live');
+        
         // Initialize mobile navigation
         this.mobileNav.checkMobile();
         if (this.mobileNav.isMobile) {
@@ -1081,12 +1098,34 @@ export class IPTVApp {
     }
 
     // View Switching Methods
-    async toggleView() {
-        if (this.currentView === 'live') {
-            await this.showSeriesView();
-        } else {
-            this.showLiveView();
+    async showMoviesView() {
+        logger.log('Switching to Movies view');
+        
+        // Hide live view
+        document.getElementById('mainContainer').style.display = 'none';
+        
+        // Hide series view if visible
+        if (this.seriesApp) {
+            this.seriesApp.hide();
         }
+        
+        // Initialize VOD app if not already done
+        if (!this.vodApp) {
+            this.vodApp = new VodApp(
+                this.apiService,
+                this.storageService,
+                this.favoritesService
+            );
+            await this.vodApp.init();
+        }
+        
+        // Show VOD view
+        this.vodApp.show();
+        
+        this.currentView = 'movies';
+        
+        // Update button states
+        this.updateViewButtonStates('movies');
     }
 
     async showSeriesView() {
@@ -1094,6 +1133,11 @@ export class IPTVApp {
         
         // Hide live view
         document.getElementById('mainContainer').style.display = 'none';
+        
+        // Hide VOD view if visible
+        if (this.vodApp) {
+            this.vodApp.hide();
+        }
         
         // Initialize series app if not already done
         if (!this.seriesApp) {
@@ -1110,12 +1154,8 @@ export class IPTVApp {
         
         this.currentView = 'series';
         
-        // Update button state
-        const seriesToggle = document.getElementById('seriesToggle');
-        if (seriesToggle) {
-            seriesToggle.textContent = 'Live TV';
-            seriesToggle.classList.add('active');
-        }
+        // Update button states
+        this.updateViewButtonStates('series');
     }
 
     showLiveView() {
@@ -1126,16 +1166,47 @@ export class IPTVApp {
             this.seriesApp.hide();
         }
         
+        // Hide VOD view
+        if (this.vodApp) {
+            this.vodApp.hide();
+        }
+        
         // Show live view
         document.getElementById('mainContainer').style.display = 'flex';
         
         this.currentView = 'live';
         
-        // Update button state
+        // Update button states
+        this.updateViewButtonStates('live');
+    }
+
+    updateViewButtonStates(activeView) {
+        const liveTvToggle = document.getElementById('liveTvToggle');
         const seriesToggle = document.getElementById('seriesToggle');
-        if (seriesToggle) {
-            seriesToggle.textContent = 'Series';
-            seriesToggle.classList.remove('active');
+        const moviesToggle = document.getElementById('moviesToggle');
+        const epgToggle = document.getElementById('epgToggle');
+        
+        // Remove active class from all buttons
+        if (liveTvToggle) liveTvToggle.classList.remove('active');
+        if (seriesToggle) seriesToggle.classList.remove('active');
+        if (moviesToggle) moviesToggle.classList.remove('active');
+        
+        // Add active class to current view button
+        if (activeView === 'live' && liveTvToggle) {
+            liveTvToggle.classList.add('active');
+        } else if (activeView === 'series' && seriesToggle) {
+            seriesToggle.classList.add('active');
+        } else if (activeView === 'movies' && moviesToggle) {
+            moviesToggle.classList.add('active');
+        }
+        
+        // Show EPG button only in Live TV mode
+        if (epgToggle) {
+            if (activeView === 'live') {
+                epgToggle.style.display = '';
+            } else {
+                epgToggle.style.display = 'none';
+            }
         }
     }
 }

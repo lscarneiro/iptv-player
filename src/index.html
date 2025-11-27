@@ -24,8 +24,10 @@
     <div class="header">
         <h1>IPTV Player</h1>
         <div class="header-buttons">
-            <button class="header-btn" id="seriesToggle">Series</button>
             <button class="header-btn" id="epgToggle">EPG</button>
+            <button class="header-btn" id="liveTvToggle">Live TV</button>
+            <button class="header-btn" id="seriesToggle">Series</button>
+            <button class="header-btn" id="moviesToggle">Movies</button>
             <button class="header-btn" id="accountToggle">Account</button>
             <button class="settings-toggle" id="settingsToggle">Settings</button>
         </div>
@@ -193,6 +195,8 @@
                 <div class="video-info-compact" id="seriesVideoInfoCompact">
                     <div id="seriesVideoInfoDetails">Loading stream information...</div>
                 </div>
+                <!-- Track controls container -->
+                <div class="track-controls-container" id="seriesTrackControlsContainer"></div>
                 <div class="fallback-link-compact" id="seriesFallbackLinkLarge" style="display: none;">
                     <strong>Direct Link:</strong> <a href="#" id="seriesFallbackUrlLarge" target="_blank">Open in VLC</a>
                 </div>
@@ -204,6 +208,74 @@
                 </div>
                 <!-- Stream EPG Container (not used for series but kept for consistency) -->
                 <div class="stream-epg-container" id="seriesStreamEpgContainer" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VOD/Movies Container -->
+    <div class="vod-container" id="vodContainer" style="display: none;">
+        <!-- Left panel: Categories -->
+        <div class="vod-left-panel active" id="vodLeftPanel">
+            <div class="panel-header">
+                <div class="panel-title">Movie Categories</div>
+                <div class="search-controls">
+                    <div class="search-input-container">
+                        <input type="text" class="search-box" id="vodCategorySearch" placeholder="Search categories...">
+                        <button class="clear-btn hidden" id="clearVodCategorySearch" title="Clear search">×</button>
+                    </div>
+                    <button class="refresh-btn" id="refreshVodCategories" title="Refresh Categories">↻</button>
+                </div>
+            </div>
+            <div class="content-area" id="vodCategoriesContainer">
+                <div class="loading">Loading categories...</div>
+            </div>
+        </div>
+
+        <!-- Right panel: Movies list -->
+        <div class="vod-right-panel" id="vodRightPanel">
+            <div class="panel-header hidden">
+                <div class="panel-title">Movies</div>
+                <div class="search-controls">
+                    <div class="search-input-container">
+                        <input type="text" class="search-box" id="vodSearch" placeholder="Search movies...">
+                        <button class="clear-btn hidden" id="clearVodSearch" title="Clear search">×</button>
+                    </div>
+                    <button class="refresh-btn" id="refreshVodList" title="Refresh Movies">↻</button>
+                </div>
+            </div>
+            <div class="content-area" id="vodListContainer">
+                <div class="loading">Select a category to view movies</div>
+            </div>
+        </div>
+
+        <!-- Movie Detail Panel (overlay) -->
+        <div class="vod-detail-panel" id="vodDetailPanel" style="display: none;"></div>
+
+        <!-- VOD Video Panel -->
+        <div class="video-panel" id="vodVideoPanel" style="display: none;">
+            <div class="video-panel-header">
+                <div class="video-panel-title-container">
+                    <div class="video-panel-title" id="vodVideoPanelTitle">Now Playing</div>
+                    <button class="video-favorite-star" id="vodVideoFavoriteStar" title="Add to favorites" style="display: none;">☆</button>
+                </div>
+                <button class="close-stream-btn" id="closeVodVideoPanel" title="Close Stream">Close Stream</button>
+            </div>
+            <!-- Stream info and direct link below header -->
+            <div class="video-panel-info-bar">
+                <div class="video-info-compact" id="vodVideoInfoCompact">
+                    <div id="vodVideoInfoDetails">Loading stream information...</div>
+                </div>
+                <!-- Track controls container -->
+                <div class="track-controls-container" id="vodTrackControlsContainer"></div>
+                <div class="fallback-link-compact" id="vodFallbackLinkLarge" style="display: none;">
+                    <strong>Direct Link:</strong> <a href="#" id="vodFallbackUrlLarge" target="_blank">Open in VLC</a>
+                </div>
+            </div>
+            <div class="video-panel-content">
+                <div id="vodVideoPanelError" style="display: none;"></div>
+                <div class="video-container-large">
+                    <video class="video-player-large" id="vodVideoPlayerLarge" controls></video>
+                </div>
             </div>
         </div>
     </div>

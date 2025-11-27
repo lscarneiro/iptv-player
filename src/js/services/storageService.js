@@ -9,7 +9,7 @@ export class StorageService {
 
     async init() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open('IPTVPlayerDB', 4); // Increment version to trigger upgrade
+            const request = indexedDB.open('IPTVPlayerDB', 5); // Increment version to trigger upgrade
             
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
@@ -65,6 +65,22 @@ export class StorageService {
                 if (!db.objectStoreNames.contains('seriesInfo')) {
                     db.createObjectStore('seriesInfo', { keyPath: 'key' });
                     logger.log('Created seriesInfo store');
+                }
+                
+                // VOD stores
+                if (!db.objectStoreNames.contains('vodCategories')) {
+                    db.createObjectStore('vodCategories', { keyPath: 'key' });
+                    logger.log('Created vodCategories store');
+                }
+                
+                if (!db.objectStoreNames.contains('vod')) {
+                    db.createObjectStore('vod', { keyPath: 'key' });
+                    logger.log('Created vod store');
+                }
+                
+                if (!db.objectStoreNames.contains('vodInfo')) {
+                    db.createObjectStore('vodInfo', { keyPath: 'key' });
+                    logger.log('Created vodInfo store');
                 }
                 
                 logger.log('Available stores:', Array.from(db.objectStoreNames));
@@ -131,7 +147,7 @@ export class StorageService {
             return Promise.resolve();
         }
         return new Promise((resolve, reject) => {
-            const stores = ['categories', 'streams', 'userInfo', 'favorites', 'epg', 'seriesCategories', 'series', 'seriesInfo'];
+            const stores = ['categories', 'streams', 'userInfo', 'favorites', 'epg', 'seriesCategories', 'series', 'seriesInfo', 'vodCategories', 'vod', 'vodInfo'];
             const transaction = this.db.transaction(stores, 'readwrite');
             
             let completed = 0;
@@ -287,6 +303,148 @@ export class StorageService {
 
     async getSeriesInfo(seriesId) {
         return await this.getFromIndexedDB('seriesInfo', `series_info_${seriesId}`);
+    }
+
+    // VOD data management
+    async saveVodCategories(categories) {
+        return await this.saveToIndexedDB('vodCategories', 'vod_categories', categories);
+    }
+
+    async getVodCategories() {
+        return await this.getFromIndexedDB('vodCategories', 'vod_categories');
+    }
+
+    async saveVod(categoryId, movies) {
+        const key = categoryId ? `vod_category_${categoryId}` : 'all_vod';
+        return await this.saveToIndexedDB('vod', key, movies);
+    }
+
+    async getVod(categoryId) {
+        const key = categoryId ? `vod_category_${categoryId}` : 'all_vod';
+        return await this.getFromIndexedDB('vod', key);
+    }
+
+    async saveVodInfo(vodId, info) {
+        return await this.saveToIndexedDB('vodInfo', `vod_info_${vodId}`, info);
+    }
+
+    async getVodInfo(vodId) {
+        return await this.getFromIndexedDB('vodInfo', `vod_info_${vodId}`);
+    }
+
+    // VOD Playhead/Resume tracking
+    // Data structure: { movieId: { position: number, duration: number, lastWatched: timestamp, movieData: {...} } }
+
+    saveVodPlayhead(movieId, position, duration, movieData) {
+        const playheadData = this.loadAllVodPlayheads();
+        playheadData[movieId] = {
+            position: position,
+            duration: duration,
+            lastWatched: Date.now(),
+            movieData: movieData // Store minimal movie info for display
+        };
+        localStorage.setItem('vod_playheads', JSON.stringify(playheadData));
+    }
+
+    loadVodPlayhead(movieId) {
+        const playheadData = this.loadAllVodPlayheads();
+        return playheadData[movieId] || null;
+    }
+
+    loadAllVodPlayheads() {
+        const saved = localStorage.getItem('vod_playheads');
+        if (saved) {
+            try {
+                return JSON.parse(saved);
+            } catch (e) {
+                logger.error('Failed to parse VOD playheads:', e);
+                return {};
+            }
+        }
+        return {};
+    }
+
+    removeVodPlayhead(movieId) {
+        const playheadData = this.loadAllVodPlayheads();
+        if (playheadData[movieId]) {
+            delete playheadData[movieId];
+            localStorage.setItem('vod_playheads', JSON.stringify(playheadData));
+        }
+    }
+
+    clearAllVodPlayheads() {
+        localStorage.removeItem('vod_playheads');
+    }
+
+    // Clean up invalid playhead entries
+    cleanupInvalidPlayheads() {
+        const playheadData = this.loadAllVodPlayheads();
+        let cleaned = false;
+        
+        Object.keys(playheadData).forEach(movieId => {
+            const item = playheadData[movieId];
+            
+            // Remove if missing required fields
+            if (!item || 
+                typeof item.position !== 'number' || 
+                typeof item.duration !== 'number' ||
+                isNaN(item.position) || 
+                isNaN(item.duration) ||
+                !item.movieData ||
+                !item.movieData.name ||
+                item.movieData.name === 'Unknown') {
+                delete playheadData[movieId];
+                cleaned = true;
+                return;
+            }
+            
+            // Remove if position is invalid (< 30 seconds or >= 95% watched)
+            const percentWatched = item.duration > 0 ? (item.position / item.duration) * 100 : 0;
+            if (item.position <= 30 || percentWatched >= 95 || item.position >= item.duration) {
+                delete playheadData[movieId];
+                cleaned = true;
+            }
+        });
+        
+        if (cleaned) {
+            localStorage.setItem('vod_playheads', JSON.stringify(playheadData));
+            logger.log('Cleaned up invalid playhead entries');
+        }
+    }
+
+    // Get movies sorted by lastWatched (most recent first)
+    getResumeWatchingList() {
+        // Clean up invalid entries first
+        this.cleanupInvalidPlayheads();
+        
+        const playheadData = this.loadAllVodPlayheads();
+        return Object.entries(playheadData)
+            .map(([movieId, data]) => ({
+                movieId: movieId,
+                ...data
+            }))
+            .filter(item => {
+                // Validate that we have required data
+                if (!item || typeof item.position !== 'number' || typeof item.duration !== 'number') {
+                    return false;
+                }
+                
+                // Only include if position is > 30 seconds and < 95% of duration
+                const percentWatched = item.duration > 0 ? (item.position / item.duration) * 100 : 0;
+                
+                // Must have valid position (> 30 seconds), valid duration, and not completed (> 95%)
+                const isValid = item.position > 30 && 
+                               item.duration > 0 && 
+                               percentWatched < 95 &&
+                               !isNaN(item.position) &&
+                               !isNaN(item.duration);
+                
+                // Also ensure we have movieData with at least a name
+                const hasMovieData = item.movieData && item.movieData.name;
+                
+                return isValid && hasMovieData;
+            })
+            .sort((a, b) => b.lastWatched - a.lastWatched);
     }
 }
 
