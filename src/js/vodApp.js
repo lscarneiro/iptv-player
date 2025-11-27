@@ -544,8 +544,16 @@ export class VodApp {
         
         // Check for saved playhead position
         const savedPlayhead = this.storageService.loadVodPlayhead(movieId);
-        if (savedPlayhead && savedPlayhead.position > 30) {
-            this.showResumeDialog(videoPlayer, savedPlayhead.position, savedPlayhead.duration);
+        if (savedPlayhead && 
+            savedPlayhead.position > 30 && 
+            savedPlayhead.duration > 0 &&
+            !isNaN(savedPlayhead.position) &&
+            !isNaN(savedPlayhead.duration)) {
+            const percentWatched = (savedPlayhead.position / savedPlayhead.duration) * 100;
+            // Only show resume dialog if < 95% watched
+            if (percentWatched < 95) {
+                this.showResumeDialog(videoPlayer, savedPlayhead.position, savedPlayhead.duration);
+            }
         }
         
         // Update with actual resolution once video metadata is loaded
@@ -665,15 +673,28 @@ export class VodApp {
         const duration = videoPlayer.duration;
         
         // Only save if we have valid position and duration
-        if (position > 0 && duration > 0 && !isNaN(position) && !isNaN(duration)) {
+        // Also ensure position is at least 30 seconds (to avoid saving accidental starts)
+        if (position >= 30 && duration > 0 && !isNaN(position) && !isNaN(duration) && position < duration) {
             // Build minimal movie data for display in Resume Watching
-            const movieData = this.currentPlayingMovieInfo ? {
+            // Only save if we have movie info
+            if (!this.currentPlayingMovieInfo || !this.currentPlayingMovieInfo.info) {
+                logger.warn('Cannot save playhead: missing movie info');
+                return;
+            }
+            
+            const movieData = {
                 name: this.currentPlayingMovieInfo.info?.name || 'Unknown',
                 cover: this.currentPlayingMovieInfo.info?.cover_big || 
                        this.currentPlayingMovieInfo.info?.movie_image || '',
                 stream_id: this.currentPlayingMovieId,
                 container_extension: this.currentPlayingMovieInfo.movie_data?.container_extension || 'mkv'
-            } : null;
+            };
+            
+            // Only save if we have a valid name
+            if (!movieData.name || movieData.name === 'Unknown') {
+                logger.warn('Cannot save playhead: missing movie name');
+                return;
+            }
             
             this.storageService.saveVodPlayhead(
                 this.currentPlayingMovieId,

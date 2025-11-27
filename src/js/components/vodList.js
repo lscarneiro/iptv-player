@@ -449,10 +449,37 @@ export class VodList {
     renderResumeWatching(resumeItems) {
         this.currentCategoryName = 'Resume Watching';
         
+        // Filter out invalid items - ensure we only show items with valid playhead data
+        const validResumeItems = resumeItems.filter(item => {
+            // Must have movieId
+            if (!item.movieId) return false;
+            
+            // Must have valid position and duration
+            if (!item.position || !item.duration || 
+                typeof item.position !== 'number' || 
+                typeof item.duration !== 'number' ||
+                isNaN(item.position) || isNaN(item.duration)) {
+                return false;
+            }
+            
+            // Position must be > 30 seconds and < 95% of duration
+            const percentWatched = item.duration > 0 ? (item.position / item.duration) * 100 : 0;
+            if (item.position <= 30 || percentWatched >= 95) {
+                return false;
+            }
+            
+            // Must have movieData with a name
+            if (!item.movieData || !item.movieData.name || item.movieData.name === 'Unknown') {
+                return false;
+            }
+            
+            return true;
+        });
+        
         // Update panel header
         const panelTitle = document.querySelector('.vod-right-panel .panel-title');
         if (panelTitle) {
-            panelTitle.textContent = `Movies - Resume Watching (${resumeItems.length})`;
+            panelTitle.textContent = `Movies - Resume Watching (${validResumeItems.length})`;
         }
         
         // Reset scroll position
@@ -464,8 +491,8 @@ export class VodList {
         
         let html = '<div class="vod-grid">';
         
-        resumeItems.forEach(item => {
-            const movieData = item.movieData || {};
+        validResumeItems.forEach(item => {
+            const movieData = item.movieData;
             const percentWatched = item.duration > 0 ? Math.round((item.position / item.duration) * 100) : 0;
             const formattedPosition = this.formatTime(item.position);
             const coverUrl = movieData.cover || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="300"%3E%3Crect fill="%23404040" width="200" height="300"/%3E%3C/svg%3E';
@@ -482,7 +509,7 @@ export class VodList {
                         </button>
                     </div>
                     <div class="vod-info">
-                        <div class="vod-name" title="${escapeHtml(movieData.name || 'Unknown')}">${escapeHtml(movieData.name || 'Unknown')}</div>
+                        <div class="vod-name" title="${escapeHtml(movieData.name)}">${escapeHtml(movieData.name)}</div>
                         <div class="vod-meta">
                             <span class="vod-resume-time">${percentWatched}% • ${formattedPosition}</span>
                         </div>
@@ -493,7 +520,7 @@ export class VodList {
         
         html += '</div>';
         
-        if (resumeItems.length === 0) {
+        if (validResumeItems.length === 0) {
             html = '<div class="empty-state">No movies in progress. Start watching to see them here.</div>';
         }
         

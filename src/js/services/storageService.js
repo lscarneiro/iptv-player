@@ -376,8 +376,47 @@ export class StorageService {
         localStorage.removeItem('vod_playheads');
     }
 
+    // Clean up invalid playhead entries
+    cleanupInvalidPlayheads() {
+        const playheadData = this.loadAllVodPlayheads();
+        let cleaned = false;
+        
+        Object.keys(playheadData).forEach(movieId => {
+            const item = playheadData[movieId];
+            
+            // Remove if missing required fields
+            if (!item || 
+                typeof item.position !== 'number' || 
+                typeof item.duration !== 'number' ||
+                isNaN(item.position) || 
+                isNaN(item.duration) ||
+                !item.movieData ||
+                !item.movieData.name ||
+                item.movieData.name === 'Unknown') {
+                delete playheadData[movieId];
+                cleaned = true;
+                return;
+            }
+            
+            // Remove if position is invalid (< 30 seconds or >= 95% watched)
+            const percentWatched = item.duration > 0 ? (item.position / item.duration) * 100 : 0;
+            if (item.position <= 30 || percentWatched >= 95 || item.position >= item.duration) {
+                delete playheadData[movieId];
+                cleaned = true;
+            }
+        });
+        
+        if (cleaned) {
+            localStorage.setItem('vod_playheads', JSON.stringify(playheadData));
+            logger.log('Cleaned up invalid playhead entries');
+        }
+    }
+
     // Get movies sorted by lastWatched (most recent first)
     getResumeWatchingList() {
+        // Clean up invalid entries first
+        this.cleanupInvalidPlayheads();
+        
         const playheadData = this.loadAllVodPlayheads();
         return Object.entries(playheadData)
             .map(([movieId, data]) => ({
@@ -385,9 +424,25 @@ export class StorageService {
                 ...data
             }))
             .filter(item => {
+                // Validate that we have required data
+                if (!item || typeof item.position !== 'number' || typeof item.duration !== 'number') {
+                    return false;
+                }
+                
                 // Only include if position is > 30 seconds and < 95% of duration
                 const percentWatched = item.duration > 0 ? (item.position / item.duration) * 100 : 0;
-                return item.position > 30 && percentWatched < 95;
+                
+                // Must have valid position (> 30 seconds), valid duration, and not completed (> 95%)
+                const isValid = item.position > 30 && 
+                               item.duration > 0 && 
+                               percentWatched < 95 &&
+                               !isNaN(item.position) &&
+                               !isNaN(item.duration);
+                
+                // Also ensure we have movieData with at least a name
+                const hasMovieData = item.movieData && item.movieData.name;
+                
+                return isValid && hasMovieData;
             })
             .sort((a, b) => b.lastWatched - a.lastWatched);
     }
