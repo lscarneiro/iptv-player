@@ -3,6 +3,8 @@
 import { SeriesCategoryList } from './components/seriesCategoryList.js';
 import { SeriesList } from './components/seriesList.js';
 import { SeriesInfoPanel } from './components/seriesInfoPanel.js';
+import { TrackControls } from './components/trackControls.js';
+import { TrackDetectionService } from './services/trackDetectionService.js';
 import { VideoPlayer } from './components/videoPlayer.js';
 import { debounce } from './utils/debounce.js';
 import { toggleClearButton } from './utils/domHelpers.js';
@@ -29,6 +31,10 @@ export class SeriesApp {
         // Request tracking for preventing race conditions
         this.currentCategoryLoadId = 0;
         this.currentSeriesLoadId = 0;
+        
+        // Track controls
+        this.trackControls = null;
+        this.currentEpisodeInfo = null;
         
         this.initialized = false;
     }
@@ -384,13 +390,33 @@ export class SeriesApp {
                 throw new Error('No valid episode URL found');
             }
             
+            // Find episode info from current series info
+            let episodeInfo = null;
+            if (this.seriesInfoPanel.currentSeriesInfo) {
+                const seriesInfo = this.seriesInfoPanel.currentSeriesInfo;
+                const episodes = seriesInfo.episodes || {};
+                
+                // Search through all seasons for this episode
+                for (const seasonKey in episodes) {
+                    const seasonEpisodes = episodes[seasonKey] || [];
+                    const episode = seasonEpisodes.find(ep => ep.id == episodeId || ep.episode_id == episodeId);
+                    if (episode) {
+                        episodeInfo = episode.info || episode;
+                        break;
+                    }
+                }
+            }
+            
+            // Store current episode info
+            this.currentEpisodeInfo = episodeInfo;
+            
             // Show series video panel and hide detail panel
             this.showSeriesVideoPanel();
             this.seriesInfoPanel.hide();
             
             // Always use direct video playback for episodes (MKV, MP4, etc.)
             // Most series episodes are MKV files that need direct playback
-            this.playEpisodeDirectly(streamUrl, episodeTitle, episodeId, extension);
+            this.playEpisodeDirectly(streamUrl, episodeTitle, episodeId, extension, episodeInfo);
             
         } catch (error) {
             logger.error('Failed to play episode:', error);
@@ -425,7 +451,7 @@ export class SeriesApp {
         }
     }
 
-    playEpisodeDirectly(videoUrl, title, episodeId, extension) {
+    playEpisodeDirectly(videoUrl, title, episodeId, extension, episodeInfo = null) {
         // Use native HTML5 video player for all episodes
         const videoPlayer = document.getElementById(this.seriesVideoElementIds.videoPlayer);
         const videoPanelTitle = document.getElementById(this.seriesVideoElementIds.videoPanelTitle);
@@ -472,6 +498,26 @@ export class SeriesApp {
         videoPlayer.appendChild(source);
         
         videoPlayer.load();
+        
+        // Detect and initialize track controls once metadata is loaded
+        videoPlayer.addEventListener('loadedmetadata', async () => {
+            // Detect tracks from API data (episodeInfo.audio) or HTML5/MKV
+            const detectedTracks = await TrackDetectionService.detectTracks({
+                apiData: episodeInfo,
+                videoElement: videoPlayer,
+                videoUrl: videoUrl
+            });
+            
+            if (!this.trackControls) {
+                this.trackControls = new TrackControls('seriesTrackControlsContainer');
+            }
+            this.trackControls.setTracks({
+                audioTracks: detectedTracks.audioTracks,
+                subtitleTracks: detectedTracks.subtitleTracks,
+                source: detectedTracks.source,
+                videoElement: videoPlayer
+            });
+        }, { once: true });
         
         // Try to play
         const playPromise = videoPlayer.play();
@@ -533,6 +579,14 @@ export class SeriesApp {
             videoPlayer.innerHTML = ''; // Clear sources
             videoPlayer.load();
         }
+        
+        // Hide track controls
+        if (this.trackControls) {
+            this.trackControls.hide();
+        }
+        
+        // Reset episode info
+        this.currentEpisodeInfo = null;
         
         // Hide video panel
         this.hideSeriesVideoPanel();

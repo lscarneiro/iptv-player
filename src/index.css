@@ -3777,14 +3777,14 @@ body.video-fullscreen .video-player-large {
     /* Inherits styles from .video-panel */
 }
 
-/* VOD Track Controls */
-.vod-track-controls-container {
+/* Unified Track Controls */
+.track-controls-container {
     display: flex;
     gap: 1rem;
     padding: 0.5rem 0;
 }
 
-.vod-track-controls {
+.track-controls {
     display: flex;
     gap: 1rem;
 }
@@ -3812,6 +3812,12 @@ body.video-fullscreen .video-player-large {
 
 .track-select:hover {
     border-color: #007bff;
+}
+
+.track-status-message {
+    color: #aaa;
+    font-size: 0.85rem;
+    font-style: italic;
 }
 
 /* VOD Detail Tracks Section */

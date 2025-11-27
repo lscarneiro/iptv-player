@@ -3,7 +3,8 @@
 import { VodCategoryList } from './components/vodCategoryList.js';
 import { VodList } from './components/vodList.js';
 import { VodInfoPanel } from './components/vodInfoPanel.js';
-import { VodTrackControls } from './components/vodTrackControls.js';
+import { TrackControls } from './components/trackControls.js';
+import { TrackDetectionService } from './services/trackDetectionService.js';
 import { VideoPlayer } from './components/videoPlayer.js';
 import { debounce } from './utils/debounce.js';
 import { toggleClearButton, escapeHtml } from './utils/domHelpers.js';
@@ -35,7 +36,7 @@ export class VodApp {
         this.currentPlayingMovieId = null;
         this.currentPlayingMovieInfo = null;
         this.playheadUpdateInterval = null;
-        this.vodTrackControls = null;
+        this.trackControls = null;
         
         this.initialized = false;
     }
@@ -548,7 +549,7 @@ export class VodApp {
         }
         
         // Update with actual resolution once video metadata is loaded
-        videoPlayer.addEventListener('loadedmetadata', () => {
+        videoPlayer.addEventListener('loadedmetadata', async () => {
             const width = videoPlayer.videoWidth;
             const height = videoPlayer.videoHeight;
             if (width && height && videoInfoDetails) {
@@ -558,11 +559,22 @@ export class VodApp {
                 videoInfoDetails.innerHTML = resolutionSpan + ' • ' + currentContent;
             }
             
-            // Initialize track controls
-            if (!this.vodTrackControls) {
-                this.vodTrackControls = new VodTrackControls('vodTrackControlsContainer');
+            // Detect and initialize track controls
+            const detectedTracks = await TrackDetectionService.detectTracks({
+                apiData: movieInfo?.info,
+                videoElement: videoPlayer,
+                videoUrl: videoUrl
+            });
+            
+            if (!this.trackControls) {
+                this.trackControls = new TrackControls('vodTrackControlsContainer');
             }
-            this.vodTrackControls.setVideoElement(videoPlayer);
+            this.trackControls.setTracks({
+                audioTracks: detectedTracks.audioTracks,
+                subtitleTracks: detectedTracks.subtitleTracks,
+                source: detectedTracks.source,
+                videoElement: videoPlayer
+            });
         }, { once: true });
         
         // Start playhead tracking once playback begins
@@ -742,8 +754,8 @@ export class VodApp {
         }
         
         // Hide track controls
-        if (this.vodTrackControls) {
-            this.vodTrackControls.hide();
+        if (this.trackControls) {
+            this.trackControls.hide();
         }
         
         // Hide video panel
