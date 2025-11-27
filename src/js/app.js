@@ -16,6 +16,7 @@ import { debounce } from './utils/debounce.js';
 import { toggleClearButton } from './utils/domHelpers.js';
 import { logger } from './utils/logger.js';
 import { SeriesApp } from './seriesApp.js';
+import { VodApp } from './vodApp.js';
 
 export class IPTVApp {
     constructor() {
@@ -37,7 +38,9 @@ export class IPTVApp {
         
         // Series app (lazy loaded)
         this.seriesApp = null;
-        this.currentView = 'live'; // 'live' or 'series'
+        // VOD app (lazy loaded)
+        this.vodApp = null;
+        this.currentView = 'live'; // 'live', 'series', or 'movies'
         
         this.init();
     }
@@ -145,6 +148,11 @@ export class IPTVApp {
         // Series toggle
         document.getElementById('seriesToggle').addEventListener('click', () => {
             this.toggleView();
+        });
+        
+        // Movies toggle
+        document.getElementById('moviesToggle').addEventListener('click', () => {
+            this.showMoviesView();
         });
         
         // Account panel
@@ -1089,6 +1097,43 @@ export class IPTVApp {
         }
     }
 
+    async showMoviesView() {
+        logger.log('Switching to Movies view');
+        
+        // Hide live view
+        document.getElementById('mainContainer').style.display = 'none';
+        
+        // Hide series view if visible
+        if (this.seriesApp) {
+            this.seriesApp.hide();
+        }
+        
+        // Initialize VOD app if not already done
+        if (!this.vodApp) {
+            this.vodApp = new VodApp(
+                this.apiService,
+                this.storageService,
+                this.favoritesService
+            );
+            await this.vodApp.init();
+        }
+        
+        // Show VOD view
+        this.vodApp.show();
+        
+        this.currentView = 'movies';
+        
+        // Update button states
+        const seriesToggle = document.getElementById('seriesToggle');
+        const moviesToggle = document.getElementById('moviesToggle');
+        if (seriesToggle) {
+            seriesToggle.classList.remove('active');
+        }
+        if (moviesToggle) {
+            moviesToggle.classList.add('active');
+        }
+    }
+
     async showSeriesView() {
         logger.log('Switching to Series view');
         
@@ -1110,11 +1155,15 @@ export class IPTVApp {
         
         this.currentView = 'series';
         
-        // Update button state
+        // Update button states
         const seriesToggle = document.getElementById('seriesToggle');
+        const moviesToggle = document.getElementById('moviesToggle');
         if (seriesToggle) {
             seriesToggle.textContent = 'Live TV';
             seriesToggle.classList.add('active');
+        }
+        if (moviesToggle) {
+            moviesToggle.classList.remove('active');
         }
     }
 
@@ -1126,16 +1175,25 @@ export class IPTVApp {
             this.seriesApp.hide();
         }
         
+        // Hide VOD view
+        if (this.vodApp) {
+            this.vodApp.hide();
+        }
+        
         // Show live view
         document.getElementById('mainContainer').style.display = 'flex';
         
         this.currentView = 'live';
         
-        // Update button state
+        // Update button states
         const seriesToggle = document.getElementById('seriesToggle');
+        const moviesToggle = document.getElementById('moviesToggle');
         if (seriesToggle) {
             seriesToggle.textContent = 'Series';
             seriesToggle.classList.remove('active');
+        }
+        if (moviesToggle) {
+            moviesToggle.classList.remove('active');
         }
     }
 }

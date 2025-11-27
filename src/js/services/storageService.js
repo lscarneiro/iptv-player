@@ -9,7 +9,7 @@ export class StorageService {
 
     async init() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open('IPTVPlayerDB', 4); // Increment version to trigger upgrade
+            const request = indexedDB.open('IPTVPlayerDB', 5); // Increment version to trigger upgrade
             
             request.onerror = () => reject(request.error);
             request.onsuccess = () => {
@@ -65,6 +65,22 @@ export class StorageService {
                 if (!db.objectStoreNames.contains('seriesInfo')) {
                     db.createObjectStore('seriesInfo', { keyPath: 'key' });
                     logger.log('Created seriesInfo store');
+                }
+                
+                // VOD stores
+                if (!db.objectStoreNames.contains('vodCategories')) {
+                    db.createObjectStore('vodCategories', { keyPath: 'key' });
+                    logger.log('Created vodCategories store');
+                }
+                
+                if (!db.objectStoreNames.contains('vod')) {
+                    db.createObjectStore('vod', { keyPath: 'key' });
+                    logger.log('Created vod store');
+                }
+                
+                if (!db.objectStoreNames.contains('vodInfo')) {
+                    db.createObjectStore('vodInfo', { keyPath: 'key' });
+                    logger.log('Created vodInfo store');
                 }
                 
                 logger.log('Available stores:', Array.from(db.objectStoreNames));
@@ -131,7 +147,7 @@ export class StorageService {
             return Promise.resolve();
         }
         return new Promise((resolve, reject) => {
-            const stores = ['categories', 'streams', 'userInfo', 'favorites', 'epg', 'seriesCategories', 'series', 'seriesInfo'];
+            const stores = ['categories', 'streams', 'userInfo', 'favorites', 'epg', 'seriesCategories', 'series', 'seriesInfo', 'vodCategories', 'vod', 'vodInfo'];
             const transaction = this.db.transaction(stores, 'readwrite');
             
             let completed = 0;
@@ -287,6 +303,33 @@ export class StorageService {
 
     async getSeriesInfo(seriesId) {
         return await this.getFromIndexedDB('seriesInfo', `series_info_${seriesId}`);
+    }
+
+    // VOD data management
+    async saveVodCategories(categories) {
+        return await this.saveToIndexedDB('vodCategories', 'vod_categories', categories);
+    }
+
+    async getVodCategories() {
+        return await this.getFromIndexedDB('vodCategories', 'vod_categories');
+    }
+
+    async saveVod(categoryId, movies) {
+        const key = categoryId ? `vod_category_${categoryId}` : 'all_vod';
+        return await this.saveToIndexedDB('vod', key, movies);
+    }
+
+    async getVod(categoryId) {
+        const key = categoryId ? `vod_category_${categoryId}` : 'all_vod';
+        return await this.getFromIndexedDB('vod', key);
+    }
+
+    async saveVodInfo(vodId, info) {
+        return await this.saveToIndexedDB('vodInfo', `vod_info_${vodId}`, info);
+    }
+
+    async getVodInfo(vodId) {
+        return await this.getFromIndexedDB('vodInfo', `vod_info_${vodId}`);
     }
 }
 

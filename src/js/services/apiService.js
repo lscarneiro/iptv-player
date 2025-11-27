@@ -192,5 +192,27 @@ export class ApiService {
         logger.log('Trying manual URL construction:', manualUrl);
         return manualUrl;
     }
+
+    // VOD API Methods
+
+    async getVodCategories() {
+        const url = this.buildApiUrl('get_vod_categories');
+        return await this.fetchApi(url);
+    }
+
+    async getVodStreams(categoryId = null) {
+        const params = categoryId ? { category_id: categoryId } : {};
+        const url = this.buildApiUrl('get_vod_streams', params);
+        return await this.fetchApi(url);
+    }
+
+    async getVodInfo(vodId) {
+        const url = this.buildApiUrl('get_vod_info', { vod_id: vodId });
+        return await this.fetchApi(url);
+    }
+
+    getVodStreamUrl(streamId, containerExtension) {
+        return `${this.credentials.serverUrl}/movie/${this.credentials.username}/${this.credentials.password}/${streamId}.${containerExtension}`;
+    }
 }
 
