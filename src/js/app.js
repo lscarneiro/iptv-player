@@ -4,6 +4,7 @@ import { StorageService } from './services/storageService.js';
 import { ApiService } from './services/apiService.js';
 import { FavoritesService } from './services/favoritesService.js';
 import { EPGService } from './services/epgService.js';
+import { router } from './services/routerService.js';
 import { CategoryList } from './components/categoryList.js';
 import { StreamList } from './components/streamList.js';
 import { VideoPlayer } from './components/videoPlayer.js';
@@ -26,6 +27,7 @@ export class IPTVApp {
         this.epgService = new EPGService(this.apiService, this.storageService);
         this.videoPlayer = new VideoPlayer();
         this.mobileNav = new MobileNavigation();
+        this.router = router;
         
         this.categories = [];
         this.currentCategory = null;
@@ -42,6 +44,12 @@ export class IPTVApp {
         this.vodApp = null;
         this.currentView = 'live'; // 'live', 'series', or 'movies'
         
+        // Track pending route for restoration after login
+        this.pendingRoute = null;
+        
+        // Flag to prevent URL updates during programmatic navigation
+        this.skipUrlUpdate = false;
+        
         this.init();
     }
 
@@ -57,6 +65,15 @@ export class IPTVApp {
         } catch (error) {
             logger.warn('Favorites service initialization failed:', error);
         }
+        
+        // Initialize router and set up route change listener
+        this.router.init();
+        this.router.onRouteChange((route) => {
+            this.handleRouteChange(route);
+        });
+        
+        // Store initial route for restoration after login
+        this.pendingRoute = this.router.getCurrentRoute();
         
         this.setupComponents();
         this.setupEventListeners();
@@ -230,6 +247,9 @@ export class IPTVApp {
             this.videoPlayer.closeVideoPanel();
             this.streamList.clearPlayingHighlight();
             
+            // Clear stream from URL
+            this.router.clearContent();
+            
             // Notify mobile navigation
             this.mobileNav.onVideoClosed();
         });
@@ -346,6 +366,9 @@ export class IPTVApp {
             
             // Load categories
             await this.loadCategories();
+            
+            // Handle initial route restoration after login
+            await this.handleInitialRoute();
             
             // Close settings panel
             this.settingsPanel.close();
@@ -555,8 +578,13 @@ export class IPTVApp {
         }
     }
 
-    async handleCategorySelect(categoryId) {
+    async handleCategorySelect(categoryId, skipUrlUpdate = false) {
         this.currentCategory = categoryId;
+        
+        // Update URL with category (unless skipped during route restoration)
+        if (!skipUrlUpdate && !this.skipUrlUpdate) {
+            this.router.updateCategory(categoryId);
+        }
         
         // Clear any existing search when switching categories
         const searchBox = document.getElementById('streamSearch');
@@ -584,11 +612,13 @@ export class IPTVApp {
             // This runs in background and doesn't affect UI race conditions
             if (categoryId !== 'all') {
                 const categoryItem = document.querySelector(`[data-category-id="${categoryId}"]`);
-                const countSpan = categoryItem.querySelector('.category-count');
-                
-                if (!countSpan) {
-                    // Run this in background without blocking UI updates
-                    this.updateCategoryCount(categoryId, categoryItem);
+                if (categoryItem) {
+                    const countSpan = categoryItem.querySelector('.category-count');
+                    
+                    if (!countSpan) {
+                        // Run this in background without blocking UI updates
+                        this.updateCategoryCount(categoryId, categoryItem);
+                    }
                 }
             }
             
@@ -772,8 +802,13 @@ export class IPTVApp {
     }
 
     // Video Player
-    async handleWatchStream(streamId, streamName, tvArchive, tvArchiveDuration) {
+    async handleWatchStream(streamId, streamName, tvArchive, tvArchiveDuration, skipUrlUpdate = false) {
         try {
+            // Update URL with stream (unless skipped during route restoration)
+            if (!skipUrlUpdate && !this.skipUrlUpdate) {
+                this.router.updateContent(streamId, { categoryId: this.currentCategory });
+            }
+            
             // Update stream highlighting
             this.streamList.highlightPlayingStream(streamId);
             
@@ -1098,8 +1133,13 @@ export class IPTVApp {
     }
 
     // View Switching Methods
-    async showMoviesView() {
+    async showMoviesView(skipUrlUpdate = false) {
         logger.log('Switching to Movies view');
+        
+        // Update URL (unless skipped during route restoration)
+        if (!skipUrlUpdate && !this.skipUrlUpdate) {
+            this.router.setView('movies');
+        }
         
         // Hide live view
         document.getElementById('mainContainer').style.display = 'none';
@@ -1114,13 +1154,14 @@ export class IPTVApp {
             this.vodApp = new VodApp(
                 this.apiService,
                 this.storageService,
-                this.favoritesService
+                this.favoritesService,
+                this.router
             );
             await this.vodApp.init();
         }
         
-        // Show VOD view
-        this.vodApp.show();
+        // Show VOD view (skipReset when restoring route)
+        this.vodApp.show(skipUrlUpdate);
         
         this.currentView = 'movies';
         
@@ -1128,8 +1169,13 @@ export class IPTVApp {
         this.updateViewButtonStates('movies');
     }
 
-    async showSeriesView() {
+    async showSeriesView(skipUrlUpdate = false) {
         logger.log('Switching to Series view');
+        
+        // Update URL (unless skipped during route restoration)
+        if (!skipUrlUpdate && !this.skipUrlUpdate) {
+            this.router.setView('series');
+        }
         
         // Hide live view
         document.getElementById('mainContainer').style.display = 'none';
@@ -1144,13 +1190,14 @@ export class IPTVApp {
             this.seriesApp = new SeriesApp(
                 this.apiService,
                 this.storageService,
-                this.favoritesService
+                this.favoritesService,
+                this.router
             );
             await this.seriesApp.init();
         }
         
-        // Show series view
-        this.seriesApp.show();
+        // Show series view (skipReset when restoring route)
+        this.seriesApp.show(skipUrlUpdate);
         
         this.currentView = 'series';
         
@@ -1158,8 +1205,13 @@ export class IPTVApp {
         this.updateViewButtonStates('series');
     }
 
-    showLiveView() {
+    showLiveView(skipUrlUpdate = false) {
         logger.log('Switching to Live view');
+        
+        // Update URL (unless skipped during route restoration)
+        if (!skipUrlUpdate && !this.skipUrlUpdate) {
+            this.router.setView('live');
+        }
         
         // Hide series view
         if (this.seriesApp) {
@@ -1178,6 +1230,150 @@ export class IPTVApp {
         
         // Update button states
         this.updateViewButtonStates('live');
+    }
+
+    /**
+     * Handle route changes from browser navigation (back/forward)
+     * @param {object} route - The new route object
+     */
+    async handleRouteChange(route) {
+        logger.log('App: Handling route change', route);
+        
+        // Prevent URL updates during route restoration
+        this.skipUrlUpdate = true;
+        
+        try {
+            // Switch to the appropriate view
+            if (route.view !== this.currentView) {
+                if (route.view === 'series') {
+                    await this.showSeriesView(true);
+                } else if (route.view === 'movies') {
+                    await this.showMoviesView(true);
+                } else {
+                    this.showLiveView(true);
+                }
+            }
+            
+            // Handle view-specific navigation
+            if (route.view === 'live') {
+                await this.handleLiveRouteChange(route);
+            } else if (route.view === 'series' && this.seriesApp) {
+                await this.seriesApp.handleRouteChange(route);
+            } else if (route.view === 'movies' && this.vodApp) {
+                await this.vodApp.handleRouteChange(route);
+            }
+        } finally {
+            this.skipUrlUpdate = false;
+        }
+    }
+
+    /**
+     * Handle route changes specific to Live TV view
+     * @param {object} route - The route object
+     */
+    async handleLiveRouteChange(route) {
+        // Handle category change
+        if (route.categoryId && route.categoryId !== this.currentCategory) {
+            this.categoryList.selectCategory(route.categoryId);
+            await this.handleCategorySelect(route.categoryId, true);
+        } else if (!route.categoryId && !route.contentId && this.currentCategory !== 'all') {
+            // Default to 'all' if no category specified
+            this.categoryList.selectCategory('all');
+            await this.handleCategorySelect('all', true);
+        }
+        
+        // Handle stream playback
+        if (route.contentId) {
+            await this.navigateToStream(route.contentId);
+        } else {
+            // Close video if no stream specified
+            this.videoPlayer.closeVideoPanel();
+            this.streamList.clearPlayingHighlight();
+        }
+    }
+
+    /**
+     * Navigate directly to a stream by ID
+     * @param {string} streamId - The stream ID to play
+     */
+    async navigateToStream(streamId) {
+        try {
+            // Find the stream in the current list or all streams
+            let stream = this.streamList.allStreams?.find(s => String(s.stream_id) === String(streamId));
+            
+            if (!stream) {
+                // Try to find in all streams from cache
+                const allStreams = await this.storageService.getFromIndexedDB('streams', 'all_streams');
+                stream = allStreams?.find(s => String(s.stream_id) === String(streamId));
+            }
+            
+            if (stream) {
+                // If stream is in a different category, switch to it
+                if (stream.category_id && String(stream.category_id) !== String(this.currentCategory)) {
+                    this.categoryList.selectCategory(stream.category_id);
+                    await this.handleCategorySelect(stream.category_id, true);
+                }
+                
+                // Play the stream
+                await this.handleWatchStream(
+                    stream.stream_id,
+                    stream.name,
+                    stream.tv_archive,
+                    stream.tv_archive_duration,
+                    true // skipUrlUpdate
+                );
+            } else {
+                logger.warn(`Stream ${streamId} not found, falling back to list view`);
+                // Clear the content from URL since stream doesn't exist
+                this.router.clearContent();
+            }
+        } catch (error) {
+            logger.error('Error navigating to stream:', error);
+        }
+    }
+
+    /**
+     * Handle initial route restoration after login
+     */
+    async handleInitialRoute() {
+        const route = this.pendingRoute || this.router.getCurrentRoute();
+        this.pendingRoute = null;
+        
+        logger.log('App: Handling initial route', route);
+        
+        // Skip if just a basic live view with no specific state
+        if (route.view === 'live' && !route.categoryId && !route.contentId) {
+            return;
+        }
+        
+        // Start restoration mode
+        this.router.startRestoration();
+        this.skipUrlUpdate = true;
+        
+        try {
+            // Switch to the appropriate view
+            if (route.view === 'series') {
+                await this.showSeriesView(true);
+                if (this.seriesApp) {
+                    await this.seriesApp.handleRouteChange(route);
+                }
+            } else if (route.view === 'movies') {
+                await this.showMoviesView(true);
+                if (this.vodApp) {
+                    await this.vodApp.handleRouteChange(route);
+                }
+            } else {
+                // Live view - handle category and stream
+                await this.handleLiveRouteChange(route);
+            }
+        } catch (error) {
+            logger.error('Error restoring initial route:', error);
+            // Fall back to default view
+            this.showLiveView(true);
+        } finally {
+            this.router.endRestoration();
+            this.skipUrlUpdate = false;
+        }
     }
 
     updateViewButtonStates(activeView) {
