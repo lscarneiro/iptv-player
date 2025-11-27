@@ -145,12 +145,17 @@ export class IPTVApp {
         // Settings panel
         this.settingsPanel.setupEventListeners();
         
-        // Series toggle
-        document.getElementById('seriesToggle').addEventListener('click', () => {
-            this.toggleView();
+        // Live TV button
+        document.getElementById('liveTvToggle').addEventListener('click', () => {
+            this.showLiveView();
         });
         
-        // Movies toggle
+        // Series button
+        document.getElementById('seriesToggle').addEventListener('click', () => {
+            this.showSeriesView();
+        });
+        
+        // Movies button
         document.getElementById('moviesToggle').addEventListener('click', () => {
             this.showMoviesView();
         });
@@ -1080,6 +1085,10 @@ export class IPTVApp {
     showMainInterface() {
         document.getElementById('mainContainer').style.display = 'flex';
         
+        // Set Live TV as active view
+        this.currentView = 'live';
+        this.updateViewButtonStates('live');
+        
         // Initialize mobile navigation
         this.mobileNav.checkMobile();
         if (this.mobileNav.isMobile) {
@@ -1089,14 +1098,6 @@ export class IPTVApp {
     }
 
     // View Switching Methods
-    async toggleView() {
-        if (this.currentView === 'live') {
-            await this.showSeriesView();
-        } else {
-            this.showLiveView();
-        }
-    }
-
     async showMoviesView() {
         logger.log('Switching to Movies view');
         
@@ -1124,14 +1125,7 @@ export class IPTVApp {
         this.currentView = 'movies';
         
         // Update button states
-        const seriesToggle = document.getElementById('seriesToggle');
-        const moviesToggle = document.getElementById('moviesToggle');
-        if (seriesToggle) {
-            seriesToggle.classList.remove('active');
-        }
-        if (moviesToggle) {
-            moviesToggle.classList.add('active');
-        }
+        this.updateViewButtonStates('movies');
     }
 
     async showSeriesView() {
@@ -1139,6 +1133,11 @@ export class IPTVApp {
         
         // Hide live view
         document.getElementById('mainContainer').style.display = 'none';
+        
+        // Hide VOD view if visible
+        if (this.vodApp) {
+            this.vodApp.hide();
+        }
         
         // Initialize series app if not already done
         if (!this.seriesApp) {
@@ -1156,15 +1155,7 @@ export class IPTVApp {
         this.currentView = 'series';
         
         // Update button states
-        const seriesToggle = document.getElementById('seriesToggle');
-        const moviesToggle = document.getElementById('moviesToggle');
-        if (seriesToggle) {
-            seriesToggle.textContent = 'Live TV';
-            seriesToggle.classList.add('active');
-        }
-        if (moviesToggle) {
-            moviesToggle.classList.remove('active');
-        }
+        this.updateViewButtonStates('series');
     }
 
     showLiveView() {
@@ -1186,14 +1177,26 @@ export class IPTVApp {
         this.currentView = 'live';
         
         // Update button states
+        this.updateViewButtonStates('live');
+    }
+
+    updateViewButtonStates(activeView) {
+        const liveTvToggle = document.getElementById('liveTvToggle');
         const seriesToggle = document.getElementById('seriesToggle');
         const moviesToggle = document.getElementById('moviesToggle');
-        if (seriesToggle) {
-            seriesToggle.textContent = 'Series';
-            seriesToggle.classList.remove('active');
-        }
-        if (moviesToggle) {
-            moviesToggle.classList.remove('active');
+        
+        // Remove active class from all buttons
+        if (liveTvToggle) liveTvToggle.classList.remove('active');
+        if (seriesToggle) seriesToggle.classList.remove('active');
+        if (moviesToggle) moviesToggle.classList.remove('active');
+        
+        // Add active class to current view button
+        if (activeView === 'live' && liveTvToggle) {
+            liveTvToggle.classList.add('active');
+        } else if (activeView === 'series' && seriesToggle) {
+            seriesToggle.classList.add('active');
+        } else if (activeView === 'movies' && moviesToggle) {
+            moviesToggle.classList.add('active');
         }
     }
 }
