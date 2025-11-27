@@ -1184,6 +1184,7 @@ export class IPTVApp {
         const liveTvToggle = document.getElementById('liveTvToggle');
         const seriesToggle = document.getElementById('seriesToggle');
         const moviesToggle = document.getElementById('moviesToggle');
+        const epgToggle = document.getElementById('epgToggle');
         
         // Remove active class from all buttons
         if (liveTvToggle) liveTvToggle.classList.remove('active');
@@ -1197,6 +1198,15 @@ export class IPTVApp {
             seriesToggle.classList.add('active');
         } else if (activeView === 'movies' && moviesToggle) {
             moviesToggle.classList.add('active');
+        }
+        
+        // Show EPG button only in Live TV mode
+        if (epgToggle) {
+            if (activeView === 'live') {
+                epgToggle.style.display = '';
+            } else {
+                epgToggle.style.display = 'none';
+            }
         }
     }
 }
