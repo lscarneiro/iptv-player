@@ -3,9 +3,10 @@
 import { VodCategoryList } from './components/vodCategoryList.js';
 import { VodList } from './components/vodList.js';
 import { VodInfoPanel } from './components/vodInfoPanel.js';
+import { VodTrackControls } from './components/vodTrackControls.js';
 import { VideoPlayer } from './components/videoPlayer.js';
 import { debounce } from './utils/debounce.js';
-import { toggleClearButton } from './utils/domHelpers.js';
+import { toggleClearButton, escapeHtml } from './utils/domHelpers.js';
 import { logger } from './utils/logger.js';
 
 export class VodApp {
@@ -29,6 +30,12 @@ export class VodApp {
         // Request tracking for preventing race conditions
         this.currentCategoryLoadId = 0;
         this.currentMoviesLoadId = 0;
+        
+        // Playhead tracking
+        this.currentPlayingMovieId = null;
+        this.currentPlayingMovieInfo = null;
+        this.playheadUpdateInterval = null;
+        this.vodTrackControls = null;
         
         this.initialized = false;
     }
@@ -91,6 +98,10 @@ export class VodApp {
 
         this.vodInfoPanel.setOnPlayMovie((streamId, extension) => {
             this.handlePlayMovie(streamId, extension);
+        });
+
+        this.vodList.setOnRemoveFromResume((movieId) => {
+            this.handleRemoveFromResume(movieId);
         });
 
         this.vodInfoPanel.setOnClose(() => {
@@ -214,8 +225,9 @@ export class VodApp {
             await this.loadAllMovies(forceRefresh);
             
             const favoritesCount = this.favoritesService.getVodFavoriteCount();
+            const resumeWatchingCount = this.storageService.getResumeWatchingList().length;
             
-            this.categoryList.render(this.categories, this.allMovies.length, favoritesCount);
+            this.categoryList.render(this.categories, this.allMovies.length, favoritesCount, resumeWatchingCount);
             
             // Auto-select "All Movies" on first load
             if (this.currentCategory === null) {
@@ -266,6 +278,8 @@ export class VodApp {
             this.currentCategoryName = 'All Movies';
         } else if (categoryId === 'favorites') {
             this.currentCategoryName = 'Favorites';
+        } else if (categoryId === 'resume') {
+            this.currentCategoryName = 'Resume Watching';
         } else {
             const category = this.categories.find(c => c.category_id === categoryId);
             this.currentCategoryName = category ? category.category_name : 'Unknown Category';
@@ -299,7 +313,19 @@ export class VodApp {
             
             let movies = [];
             
-            if (this.currentCategory === 'favorites') {
+            if (this.currentCategory === 'resume') {
+                // Load Resume Watching from storage
+                const resumeItems = this.storageService.getResumeWatchingList();
+                
+                // Check if this request is still valid
+                if (loadId !== this.currentMoviesLoadId) {
+                    logger.log('Movies load outdated, skipping');
+                    return;
+                }
+                
+                this.vodList.renderResumeWatching(resumeItems);
+                return;
+            } else if (this.currentCategory === 'favorites') {
                 // Show favorites
                 movies = this.favoritesService.filterFavoriteVod(this.allMovies);
             } else if (this.currentCategory === 'all') {
@@ -383,12 +409,15 @@ export class VodApp {
                 throw new Error('No valid movie URL found');
             }
             
+            // Get the current movie info from the panel
+            const movieInfo = this.vodInfoPanel.currentMovieInfo;
+            
             // Show VOD video panel and hide detail panel
             this.showVodVideoPanel();
             this.vodInfoPanel.hide();
             
-            // Play movie directly
-            this.playMovieDirectly(streamUrl, streamId, extension);
+            // Play movie directly with full movie info
+            this.playMovieDirectly(streamUrl, streamId, extension, movieInfo);
             
         } catch (error) {
             logger.error('Failed to play movie:', error);
@@ -423,7 +452,7 @@ export class VodApp {
         }
     }
 
-    playMovieDirectly(videoUrl, movieId, extension) {
+    playMovieDirectly(videoUrl, movieId, extension, movieInfo) {
         // Use native HTML5 video player for movies
         const videoPlayer = document.getElementById(this.vodVideoElementIds.videoPlayer);
         const videoPanelTitle = document.getElementById(this.vodVideoElementIds.videoPanelTitle);
@@ -436,14 +465,56 @@ export class VodApp {
             return;
         }
         
+        // Store current movie info
+        this.currentPlayingMovieId = movieId;
+        this.currentPlayingMovieInfo = movieInfo;
+        
+        // Clear any existing playhead tracking
+        this.stopPlayheadTracking();
+        
         // Update UI
         if (videoPanelTitle) {
-            videoPanelTitle.textContent = 'Now Playing';
+            videoPanelTitle.textContent = movieInfo?.info?.name || 'Now Playing';
         }
+        
+        // Build metadata display
+        const buildMetadataDisplay = (info) => {
+            const parts = [];
+            
+            // Format (extension)
+            parts.push(`<span class="stat-item">${extension.toUpperCase()}</span>`);
+            
+            // Video info from API if available
+            if (info && info.info) {
+                const apiInfo = info.info;
+                
+                // Resolution - extract from video array if available
+                if (apiInfo.video && apiInfo.video.length > 0) {
+                    const videoInfo = apiInfo.video[0];
+                    if (videoInfo) {
+                        parts.push(`<span class="stat-item">${escapeHtml(videoInfo)}</span>`);
+                    }
+                }
+                
+                // Bitrate
+                if (apiInfo.bitrate) {
+                    const bitrateMbps = (apiInfo.bitrate / 1000000).toFixed(1);
+                    parts.push(`<span class="stat-item">${bitrateMbps} Mbps</span>`);
+                }
+                
+                // Duration
+                if (apiInfo.duration) {
+                    parts.push(`<span class="stat-item">${apiInfo.duration}</span>`);
+                }
+            }
+            
+            return parts.join(' • ');
+        };
+        
         if (videoInfoDetails) {
-            const format = extension.toUpperCase();
-            videoInfoDetails.innerHTML = `<span class="stat-item">Direct video playback (${format})</span>`;
+            videoInfoDetails.innerHTML = buildMetadataDisplay(movieInfo);
         }
+        
         if (fallbackUrlLarge) {
             fallbackUrlLarge.href = videoUrl;
             fallbackUrlLarge.textContent = videoUrl;
@@ -469,6 +540,46 @@ export class VodApp {
         videoPlayer.appendChild(source);
         
         videoPlayer.load();
+        
+        // Check for saved playhead position
+        const savedPlayhead = this.storageService.loadVodPlayhead(movieId);
+        if (savedPlayhead && savedPlayhead.position > 30) {
+            this.showResumeDialog(videoPlayer, savedPlayhead.position, savedPlayhead.duration);
+        }
+        
+        // Update with actual resolution once video metadata is loaded
+        videoPlayer.addEventListener('loadedmetadata', () => {
+            const width = videoPlayer.videoWidth;
+            const height = videoPlayer.videoHeight;
+            if (width && height && videoInfoDetails) {
+                // Prepend actual resolution
+                const resolutionSpan = `<span class="stat-item"><strong>Resolution:</strong> ${width}×${height}</span>`;
+                const currentContent = videoInfoDetails.innerHTML;
+                videoInfoDetails.innerHTML = resolutionSpan + ' • ' + currentContent;
+            }
+            
+            // Initialize track controls
+            if (!this.vodTrackControls) {
+                this.vodTrackControls = new VodTrackControls('vodTrackControlsContainer');
+            }
+            this.vodTrackControls.setVideoElement(videoPlayer);
+        }, { once: true });
+        
+        // Start playhead tracking once playback begins
+        videoPlayer.addEventListener('playing', () => {
+            this.startPlayheadTracking(videoPlayer, movieId, movieInfo);
+        }, { once: true });
+        
+        // Save playhead when video pauses or ends
+        videoPlayer.addEventListener('pause', () => {
+            this.saveCurrentPlayhead(videoPlayer);
+        });
+        
+        videoPlayer.addEventListener('ended', () => {
+            // Remove from resume list when completed (watched > 95%)
+            this.storageService.removeVodPlayhead(movieId);
+            this.stopPlayheadTracking();
+        });
         
         // Try to play
         const playPromise = videoPlayer.play();
@@ -521,14 +632,118 @@ export class VodApp {
         }
     }
 
+    startPlayheadTracking(videoPlayer, movieId, movieInfo) {
+        // Update playhead every 10 seconds
+        this.playheadUpdateInterval = setInterval(() => {
+            this.saveCurrentPlayhead(videoPlayer);
+        }, 10000);
+    }
+
+    stopPlayheadTracking() {
+        if (this.playheadUpdateInterval) {
+            clearInterval(this.playheadUpdateInterval);
+            this.playheadUpdateInterval = null;
+        }
+    }
+
+    saveCurrentPlayhead(videoPlayer) {
+        if (!this.currentPlayingMovieId || !videoPlayer) return;
+        
+        const position = videoPlayer.currentTime;
+        const duration = videoPlayer.duration;
+        
+        // Only save if we have valid position and duration
+        if (position > 0 && duration > 0 && !isNaN(position) && !isNaN(duration)) {
+            // Build minimal movie data for display in Resume Watching
+            const movieData = this.currentPlayingMovieInfo ? {
+                name: this.currentPlayingMovieInfo.info?.name || 'Unknown',
+                cover: this.currentPlayingMovieInfo.info?.cover_big || 
+                       this.currentPlayingMovieInfo.info?.movie_image || '',
+                stream_id: this.currentPlayingMovieId,
+                container_extension: this.currentPlayingMovieInfo.movie_data?.container_extension || 'mkv'
+            } : null;
+            
+            this.storageService.saveVodPlayhead(
+                this.currentPlayingMovieId,
+                position,
+                duration,
+                movieData
+            );
+        }
+    }
+
+    showResumeDialog(videoPlayer, position, duration) {
+        const formattedPosition = this.formatTime(position);
+        const formattedDuration = this.formatTime(duration);
+        const percentWatched = Math.round((position / duration) * 100);
+        
+        // Create resume dialog overlay
+        const dialogHtml = `
+            <div class="vod-resume-dialog">
+                <div class="vod-resume-dialog-content">
+                    <h3>Resume Playback?</h3>
+                    <p>You were ${percentWatched}% through this movie (${formattedPosition} / ${formattedDuration})</p>
+                    <div class="vod-resume-dialog-actions">
+                        <button class="btn btn-primary" id="vodResumeBtn">
+                            Resume from ${formattedPosition}
+                        </button>
+                        <button class="btn btn-secondary" id="vodStartOverBtn">
+                            Start from Beginning
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Show dialog
+        const dialogContainer = document.createElement('div');
+        dialogContainer.id = 'vodResumeDialogContainer';
+        dialogContainer.innerHTML = dialogHtml;
+        document.body.appendChild(dialogContainer);
+        
+        // Event listeners
+        document.getElementById('vodResumeBtn').addEventListener('click', () => {
+            videoPlayer.currentTime = position;
+            videoPlayer.play();
+            dialogContainer.remove();
+        });
+        
+        document.getElementById('vodStartOverBtn').addEventListener('click', () => {
+            videoPlayer.currentTime = 0;
+            videoPlayer.play();
+            dialogContainer.remove();
+        });
+    }
+
+    formatTime(seconds) {
+        if (isNaN(seconds) || seconds < 0) return '0:00';
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        
+        if (hours > 0) {
+            return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+
     closeVodVideo() {
         const videoPlayer = document.getElementById(this.vodVideoElementIds.videoPlayer);
+        
+        // Save current playhead before closing
+        this.saveCurrentPlayhead(videoPlayer);
+        this.stopPlayheadTracking();
         
         // Stop video playback
         if (videoPlayer) {
             videoPlayer.pause();
             videoPlayer.innerHTML = '';
             videoPlayer.load();
+        }
+        
+        // Hide track controls
+        if (this.vodTrackControls) {
+            this.vodTrackControls.hide();
         }
         
         // Hide video panel
@@ -539,19 +754,38 @@ export class VodApp {
             this.vodInfoPanel.show();
         }
         
+        // Reset tracking state
+        this.currentPlayingMovieId = null;
+        this.currentPlayingMovieInfo = null;
+        
         logger.log('VOD video closed - returned to movie detail');
+    }
+
+    handleRemoveFromResume(movieId) {
+        this.storageService.removeVodPlayhead(movieId);
+        
+        // Refresh the list if we're viewing Resume Watching
+        if (this.currentCategory === 'resume') {
+            this.loadMovies();
+        }
+        
+        // Update category counts
+        this.refreshCategoryCounts();
+    }
+
+    refreshCategoryCounts() {
+        const favoritesCount = this.favoritesService.getVodFavoriteCount();
+        const resumeWatchingCount = this.storageService.getResumeWatchingList().length;
+        
+        this.categoryList.render(this.categories, this.allMovies.length, favoritesCount, resumeWatchingCount);
+        this.categoryList.selectCategory(this.currentCategory);
     }
 
     handleMovieFavoriteToggle(movieId, isFavorite) {
         logger.log(`Movie favorite toggled: ${movieId} = ${isFavorite}`);
         
-        // Update category list counts
-        const favoritesCount = this.favoritesService.getVodFavoriteCount();
-        const allMoviesCount = this.allMovies.length;
-        this.categoryList.render(this.categories, allMoviesCount, favoritesCount);
-        
-        // Re-select current category to update UI
-        this.categoryList.selectCategory(this.currentCategory);
+        // Update category counts
+        this.refreshCategoryCounts();
         
         // If viewing favorites, refresh the list
         if (this.currentCategory === 'favorites') {
@@ -568,12 +802,7 @@ export class VodApp {
         }
         
         // Update category counts
-        const favoritesCount = this.favoritesService.getVodFavoriteCount();
-        const allMoviesCount = this.allMovies.length;
-        this.categoryList.render(this.categories, allMoviesCount, favoritesCount);
-        
-        // Re-select current category to maintain selection
-        this.categoryList.selectCategory(this.currentCategory);
+        this.refreshCategoryCounts();
     }
 
     filterMovies(searchTerm) {

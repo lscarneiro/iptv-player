@@ -83,10 +83,41 @@ export class VodInfoPanel {
                                 ${year ? `<span>${escapeHtml(year)}</span>` : ''}
                                 ${rating ? `<span>⭐ ${escapeHtml(rating)}</span>` : ''}
                                 ${duration ? `<span>${escapeHtml(duration)}</span>` : ''}
+                                ${info.bitrate ? `<span>${Math.round(info.bitrate / 1000)} kbps</span>` : ''}
                             </div>
                             ${info.plot || info.description ? `<div class="vod-detail-plot">${escapeHtml(info.plot || info.description)}</div>` : ''}
                             ${info.cast || info.actors ? `<div class="vod-detail-cast"><strong>Cast:</strong> ${escapeHtml(info.cast || info.actors)}</div>` : ''}
                             ${info.director ? `<div class="vod-detail-director"><strong>Director:</strong> ${escapeHtml(info.director)}</div>` : ''}
+                            
+                            ${(() => {
+                                // Build audio tracks section
+                                let audioTracksHtml = '';
+                                if (info.audio && Array.isArray(info.audio) && info.audio.length > 0) {
+                                    audioTracksHtml = `
+                                        <div class="vod-detail-tracks">
+                                            <strong>Audio Tracks:</strong>
+                                            <div class="vod-track-list">
+                                                ${info.audio.map((track, index) => `
+                                                    <span class="vod-track-item">${escapeHtml(track)}</span>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+                                    `;
+                                }
+                                
+                                // Build video info section
+                                let videoInfoHtml = '';
+                                if (info.video && Array.isArray(info.video) && info.video.length > 0) {
+                                    videoInfoHtml = `
+                                        <div class="vod-detail-video-info">
+                                            <strong>Video:</strong>
+                                            <span>${escapeHtml(info.video.join(', '))}</span>
+                                        </div>
+                                    `;
+                                }
+                                
+                                return audioTracksHtml + videoInfoHtml;
+                            })()}
                         </div>
                     </div>
                 </div>

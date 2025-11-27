@@ -331,5 +331,65 @@ export class StorageService {
     async getVodInfo(vodId) {
         return await this.getFromIndexedDB('vodInfo', `vod_info_${vodId}`);
     }
+
+    // VOD Playhead/Resume tracking
+    // Data structure: { movieId: { position: number, duration: number, lastWatched: timestamp, movieData: {...} } }
+
+    saveVodPlayhead(movieId, position, duration, movieData) {
+        const playheadData = this.loadAllVodPlayheads();
+        playheadData[movieId] = {
+            position: position,
+            duration: duration,
+            lastWatched: Date.now(),
+            movieData: movieData // Store minimal movie info for display
+        };
+        localStorage.setItem('vod_playheads', JSON.stringify(playheadData));
+    }
+
+    loadVodPlayhead(movieId) {
+        const playheadData = this.loadAllVodPlayheads();
+        return playheadData[movieId] || null;
+    }
+
+    loadAllVodPlayheads() {
+        const saved = localStorage.getItem('vod_playheads');
+        if (saved) {
+            try {
+                return JSON.parse(saved);
+            } catch (e) {
+                logger.error('Failed to parse VOD playheads:', e);
+                return {};
+            }
+        }
+        return {};
+    }
+
+    removeVodPlayhead(movieId) {
+        const playheadData = this.loadAllVodPlayheads();
+        if (playheadData[movieId]) {
+            delete playheadData[movieId];
+            localStorage.setItem('vod_playheads', JSON.stringify(playheadData));
+        }
+    }
+
+    clearAllVodPlayheads() {
+        localStorage.removeItem('vod_playheads');
+    }
+
+    // Get movies sorted by lastWatched (most recent first)
+    getResumeWatchingList() {
+        const playheadData = this.loadAllVodPlayheads();
+        return Object.entries(playheadData)
+            .map(([movieId, data]) => ({
+                movieId: movieId,
+                ...data
+            }))
+            .filter(item => {
+                // Only include if position is > 30 seconds and < 95% of duration
+                const percentWatched = item.duration > 0 ? (item.position / item.duration) * 100 : 0;
+                return item.position > 30 && percentWatched < 95;
+            })
+            .sort((a, b) => b.lastWatched - a.lastWatched);
+    }
 }
 

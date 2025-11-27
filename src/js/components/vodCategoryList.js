@@ -13,7 +13,7 @@ export class VodCategoryList {
         this.onCategorySelect = callback;
     }
 
-    render(categories, allMoviesCount = 0, favoritesCount = 0) {
+    render(categories, allMoviesCount = 0, favoritesCount = 0, resumeWatchingCount = 0) {
         // Sort categories alphabetically
         const sortedCategories = [...categories].sort((a, b) => 
             a.category_name.localeCompare(b.category_name)
@@ -25,6 +25,12 @@ export class VodCategoryList {
                     <span>All Movies</span>
                     <span class="category-count">(${allMoviesCount})</span>
                 </div>
+                ${resumeWatchingCount > 0 ? `
+                    <div class="category-item special resume-watching" data-category-id="resume">
+                        <span>▶ Resume Watching</span>
+                        <span class="category-count">(${resumeWatchingCount})</span>
+                    </div>
+                ` : ''}
                 <div class="category-item special favorites" data-category-id="favorites">
                     <span>⭐ Favorites</span>
                     <span class="category-count">(${favoritesCount})</span>

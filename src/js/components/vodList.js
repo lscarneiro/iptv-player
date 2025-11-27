@@ -18,6 +18,7 @@ export class VodList {
         this.favoritesService = null; // Will be set by app
         this.onMovieClick = null; // Callback for movie click
         this.onFavoriteToggle = null; // Callback for favorite toggle
+        this.onRemoveFromResume = null; // Callback for removing from resume watching
         
         this.setupInfiniteScroll();
     }
@@ -439,5 +440,97 @@ export class VodList {
                 this.updateFavoriteButton(favoriteBtn, isFavorite);
             }
         });
+    }
+
+    setOnRemoveFromResume(callback) {
+        this.onRemoveFromResume = callback;
+    }
+
+    renderResumeWatching(resumeItems) {
+        this.currentCategoryName = 'Resume Watching';
+        
+        // Update panel header
+        const panelTitle = document.querySelector('.vod-right-panel .panel-title');
+        if (panelTitle) {
+            panelTitle.textContent = `Movies - Resume Watching (${resumeItems.length})`;
+        }
+        
+        // Reset scroll position
+        if (this.container) {
+            requestAnimationFrame(() => {
+                this.container.scrollTop = 0;
+            });
+        }
+        
+        let html = '<div class="vod-grid">';
+        
+        resumeItems.forEach(item => {
+            const movieData = item.movieData || {};
+            const percentWatched = item.duration > 0 ? Math.round((item.position / item.duration) * 100) : 0;
+            const formattedPosition = this.formatTime(item.position);
+            const coverUrl = movieData.cover || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="300"%3E%3Crect fill="%23404040" width="200" height="300"/%3E%3C/svg%3E';
+            
+            html += `
+                <div class="vod-card resume-card" data-movie-id="${item.movieId}">
+                    <div class="vod-cover-container">
+                        <img src="${escapeHtml(coverUrl)}" class="vod-cover" alt="${escapeHtml(movieData.name || 'Movie')}" loading="lazy">
+                        <div class="vod-progress-bar">
+                            <div class="vod-progress-fill" style="width: ${percentWatched}%"></div>
+                        </div>
+                        <button class="vod-remove-resume" data-movie-id="${item.movieId}" title="Remove from Resume Watching">
+                            ✕
+                        </button>
+                    </div>
+                    <div class="vod-info">
+                        <div class="vod-name" title="${escapeHtml(movieData.name || 'Unknown')}">${escapeHtml(movieData.name || 'Unknown')}</div>
+                        <div class="vod-meta">
+                            <span class="vod-resume-time">${percentWatched}% • ${formattedPosition}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        
+        if (resumeItems.length === 0) {
+            html = '<div class="empty-state">No movies in progress. Start watching to see them here.</div>';
+        }
+        
+        this.container.innerHTML = html;
+        
+        // Add click listeners
+        this.container.querySelectorAll('.vod-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                // Don't trigger if clicking remove button
+                if (e.target.closest('.vod-remove-resume')) return;
+                
+                if (this.onMovieClick) {
+                    this.onMovieClick(card.dataset.movieId);
+                }
+            });
+        });
+        
+        // Add remove button listeners
+        this.container.querySelectorAll('.vod-remove-resume').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (this.onRemoveFromResume) {
+                    this.onRemoveFromResume(btn.dataset.movieId);
+                }
+            });
+        });
+    }
+
+    formatTime(seconds) {
+        if (isNaN(seconds) || seconds < 0) return '0:00';
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        
+        if (hours > 0) {
+            return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        return `${minutes}:${secs.toString().padStart(2, '0')}`;
     }
 }
