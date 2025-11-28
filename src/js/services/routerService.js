@@ -61,6 +61,7 @@ export class RouterService {
 
         // Remove leading # and /
         const cleanHash = (hash || '').replace(/^#?\/?/, '');
+        console.log('Router.parseHash: input=', hash, ', cleanHash=', cleanHash);
         
         if (!cleanHash) {
             return route;

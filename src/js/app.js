@@ -74,6 +74,8 @@ export class IPTVApp {
         
         // Store initial route for restoration after login
         this.pendingRoute = this.router.getCurrentRoute();
+        console.log('App: Initial route captured:', JSON.stringify(this.pendingRoute));
+        console.log('App: Current hash:', window.location.hash);
         
         this.setupComponents();
         this.setupEventListeners();
@@ -368,7 +370,9 @@ export class IPTVApp {
             await this.loadCategories();
             
             // Handle initial route restoration after login
+            console.log('App: About to call handleInitialRoute, pendingRoute:', JSON.stringify(this.pendingRoute));
             await this.handleInitialRoute();
+            console.log('App: handleInitialRoute completed');
             
             // Close settings panel
             this.settingsPanel.close();
@@ -1170,6 +1174,7 @@ export class IPTVApp {
     }
 
     async showSeriesView(skipUrlUpdate = false) {
+        console.log('App: showSeriesView called, skipUrlUpdate=', skipUrlUpdate);
         logger.log('Switching to Series view');
         
         // Update URL (unless skipped during route restoration)
@@ -1178,7 +1183,11 @@ export class IPTVApp {
         }
         
         // Hide live view
-        document.getElementById('mainContainer').style.display = 'none';
+        const mainContainer = document.getElementById('mainContainer');
+        console.log('App: Hiding mainContainer, current display=', mainContainer?.style.display);
+        if (mainContainer) {
+            mainContainer.style.display = 'none';
+        }
         
         // Hide VOD view if visible
         if (this.vodApp) {
@@ -1187,6 +1196,7 @@ export class IPTVApp {
         
         // Initialize series app if not already done
         if (!this.seriesApp) {
+            console.log('App: Creating new SeriesApp');
             this.seriesApp = new SeriesApp(
                 this.apiService,
                 this.storageService,
@@ -1194,12 +1204,15 @@ export class IPTVApp {
                 this.router
             );
             await this.seriesApp.init();
+            console.log('App: SeriesApp initialized');
         }
         
         // Show series view (skipReset when restoring route)
+        console.log('App: Calling seriesApp.show()');
         this.seriesApp.show(skipUrlUpdate);
         
         this.currentView = 'series';
+        console.log('App: currentView set to series');
         
         // Update button states
         this.updateViewButtonStates('series');
@@ -1339,10 +1352,13 @@ export class IPTVApp {
         const route = this.pendingRoute || this.router.getCurrentRoute();
         this.pendingRoute = null;
         
+        // Debug logging - always log to console for troubleshooting
+        console.log('App: handleInitialRoute called with route:', JSON.stringify(route));
         logger.log('App: Handling initial route', route);
         
         // Skip if just a basic live view with no specific state
         if (route.view === 'live' && !route.categoryId && !route.contentId) {
+            console.log('App: Skipping route restoration - basic live view');
             return;
         }
         
@@ -1351,22 +1367,36 @@ export class IPTVApp {
         this.skipUrlUpdate = true;
         
         try {
+            console.log('App: Restoring route for view:', route.view);
+            
             // Switch to the appropriate view
             if (route.view === 'series') {
+                console.log('App: Switching to series view');
                 await this.showSeriesView(true);
                 if (this.seriesApp) {
+                    console.log('App: Calling seriesApp.handleRouteChange');
                     await this.seriesApp.handleRouteChange(route);
+                } else {
+                    console.error('App: seriesApp is null after showSeriesView!');
                 }
             } else if (route.view === 'movies') {
+                console.log('App: Switching to movies view');
                 await this.showMoviesView(true);
                 if (this.vodApp) {
+                    console.log('App: Calling vodApp.handleRouteChange');
                     await this.vodApp.handleRouteChange(route);
+                } else {
+                    console.error('App: vodApp is null after showMoviesView!');
                 }
             } else {
                 // Live view - handle category and stream
+                console.log('App: Handling live route change');
                 await this.handleLiveRouteChange(route);
             }
+            
+            console.log('App: Route restoration completed successfully');
         } catch (error) {
+            console.error('App: Error restoring initial route:', error);
             logger.error('Error restoring initial route:', error);
             // Fall back to default view
             this.showLiveView(true);
