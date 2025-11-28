@@ -1165,7 +1165,7 @@ export class IPTVApp {
         }
         
         // Show VOD view (skipReset when restoring route)
-        this.vodApp.show(skipUrlUpdate);
+        await this.vodApp.show(skipUrlUpdate);
         
         this.currentView = 'movies';
         
@@ -1209,7 +1209,7 @@ export class IPTVApp {
         
         // Show series view (skipReset when restoring route)
         console.log('App: Calling seriesApp.show()');
-        this.seriesApp.show(skipUrlUpdate);
+        await this.seriesApp.show(skipUrlUpdate);
         
         this.currentView = 'series';
         console.log('App: currentView set to series');
