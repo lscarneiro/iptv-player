@@ -11,10 +11,11 @@ import { toggleClearButton, escapeHtml } from './utils/domHelpers.js';
 import { logger } from './utils/logger.js';
 
 export class VodApp {
-    constructor(apiService, storageService, favoritesService) {
+    constructor(apiService, storageService, favoritesService, router = null) {
         this.apiService = apiService;
         this.storageService = storageService;
         this.favoritesService = favoritesService;
+        this.router = router;
         
         // Create separate VideoPlayer instance for VOD
         this.vodVideoPlayer = new VideoPlayer();
@@ -37,6 +38,12 @@ export class VodApp {
         this.currentPlayingMovieInfo = null;
         this.playheadUpdateInterval = null;
         this.trackControls = null;
+        
+        // Current movie ID for routing
+        this.currentMovieId = null;
+        
+        // Flag to prevent URL updates during route restoration
+        this.skipUrlUpdate = false;
         
         this.initialized = false;
     }
@@ -107,6 +114,18 @@ export class VodApp {
 
         this.vodInfoPanel.setOnClose(() => {
             this.vodInfoPanel.hide();
+            this.currentMovieId = null;
+            
+            // Update URL to remove movie
+            if (this.router && !this.skipUrlUpdate) {
+                this.router.navigate({
+                    view: 'movies',
+                    categoryId: this.currentCategory,
+                    contentId: null,
+                    episodeId: null,
+                    playing: false
+                });
+            }
         });
 
         // Set up favorites change listener
@@ -271,8 +290,19 @@ export class VodApp {
         }
     }
 
-    async handleCategorySelect(categoryId) {
+    async handleCategorySelect(categoryId, skipUrlUpdate = false) {
         this.currentCategory = categoryId;
+        
+        // Update URL (unless skipped during route restoration)
+        if (!skipUrlUpdate && !this.skipUrlUpdate && this.router) {
+            this.router.navigate({
+                view: 'movies',
+                categoryId: categoryId,
+                contentId: null,
+                episodeId: null,
+                playing: false
+            });
+        }
         
         // Update category name
         if (categoryId === 'all') {
@@ -370,8 +400,21 @@ export class VodApp {
         }
     }
 
-    async handleMovieClick(movieId) {
+    async handleMovieClick(movieId, skipUrlUpdate = false) {
         try {
+            this.currentMovieId = movieId;
+            
+            // Update URL (unless skipped during route restoration)
+            if (!skipUrlUpdate && !this.skipUrlUpdate && this.router) {
+                this.router.navigate({
+                    view: 'movies',
+                    categoryId: this.currentCategory,
+                    contentId: movieId,
+                    episodeId: null,
+                    playing: false
+                });
+            }
+            
             this.vodInfoPanel.showLoading();
             
             let movieInfo = null;
@@ -397,9 +440,20 @@ export class VodApp {
         }
     }
 
-    async handlePlayMovie(streamId, extension) {
+    async handlePlayMovie(streamId, extension, skipUrlUpdate = false) {
         try {
             logger.log(`Playing movie ${streamId} (${extension})`);
+            
+            // Update URL (unless skipped during route restoration)
+            if (!skipUrlUpdate && !this.skipUrlUpdate && this.router) {
+                this.router.navigate({
+                    view: 'movies',
+                    categoryId: this.currentCategory,
+                    contentId: this.currentMovieId || streamId,
+                    episodeId: null,
+                    playing: true
+                });
+            }
             
             // Get movie stream URL
             const streamUrl = this.apiService.getVodStreamUrl(streamId, extension);
@@ -779,6 +833,17 @@ export class VodApp {
             this.trackControls.hide();
         }
         
+        // Update URL to remove playing state (back to movie detail)
+        if (this.router && !this.skipUrlUpdate && this.currentMovieId) {
+            this.router.navigate({
+                view: 'movies',
+                categoryId: this.currentCategory,
+                contentId: this.currentMovieId,
+                episodeId: null,
+                playing: false
+            });
+        }
+        
         // Hide video panel
         this.hideVodVideoPanel();
         
@@ -847,7 +912,7 @@ export class VodApp {
     }
 
     // Show the VOD view
-    async show() {
+    async show(skipReset = false) {
         const vodContainer = document.getElementById('vodContainer');
         if (vodContainer) {
             vodContainer.style.display = 'flex';
@@ -856,8 +921,8 @@ export class VodApp {
         // Initialize if not already done
         if (!this.initialized) {
             await this.init();
-        } else {
-            // If already initialized, ensure "All Movies" is selected
+        } else if (!skipReset) {
+            // If already initialized and not restoring route, ensure "All Movies" is selected
             this.categoryList.selectCategory('all');
             this.currentCategory = 'all';
             this.currentCategoryName = 'All Movies';
@@ -880,5 +945,109 @@ export class VodApp {
         
         // Hide movie detail panel
         this.vodInfoPanel.hide();
+    }
+
+    /**
+     * Handle route changes from browser navigation
+     * @param {object} route - The route object
+     */
+    async handleRouteChange(route) {
+        logger.log('VodApp: Handling route change', route);
+        
+        // Prevent URL updates during route handling
+        this.skipUrlUpdate = true;
+        
+        try {
+            // Handle category change
+            if (route.categoryId && route.categoryId !== this.currentCategory) {
+                this.categoryList.selectCategory(route.categoryId);
+                await this.handleCategorySelect(route.categoryId, true);
+            } else if (!route.categoryId && !route.contentId && this.currentCategory !== 'all') {
+                // Default to 'all' if no category specified
+                this.categoryList.selectCategory('all');
+                await this.handleCategorySelect('all', true);
+            }
+            
+            // Handle movie detail
+            if (route.contentId) {
+                await this.navigateToMovie(route.contentId);
+                
+                // Handle movie playback
+                if (route.playing) {
+                    await this.playMovieById(route.contentId);
+                }
+            } else {
+                // Close any open panels if no movie specified
+                this.vodInfoPanel.hide();
+                this.closeVodVideoSilent();
+                this.currentMovieId = null;
+            }
+        } finally {
+            this.skipUrlUpdate = false;
+        }
+    }
+
+    /**
+     * Navigate to a specific movie by ID
+     * @param {string} movieId - The movie ID
+     */
+    async navigateToMovie(movieId) {
+        logger.log('VodApp: Navigating to movie', movieId);
+        this.currentMovieId = movieId;
+        
+        // Load and show movie info
+        await this.handleMovieClick(movieId, true);
+    }
+
+    /**
+     * Play a movie by ID
+     * @param {string} movieId - The movie ID to play
+     */
+    async playMovieById(movieId) {
+        logger.log('VodApp: Playing movie by ID', movieId);
+        
+        // Make sure movie info is loaded
+        if (!this.vodInfoPanel.currentMovieInfo) {
+            await this.navigateToMovie(movieId);
+            // Wait a bit for the panel to render
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        const movieInfo = this.vodInfoPanel.currentMovieInfo;
+        if (!movieInfo) {
+            logger.warn('Movie info not loaded, cannot play');
+            return;
+        }
+        
+        // Get stream ID and extension from movie info
+        const streamId = movieInfo.movie_data?.stream_id || movieId;
+        const extension = movieInfo.movie_data?.container_extension || 'mkv';
+        
+        await this.handlePlayMovie(streamId, extension, true);
+    }
+
+    /**
+     * Close video without updating URL (for route restoration)
+     */
+    closeVodVideoSilent() {
+        const videoPlayer = document.getElementById(this.vodVideoElementIds.videoPlayer);
+        
+        // Save current playhead before closing
+        this.saveCurrentPlayhead(videoPlayer);
+        this.stopPlayheadTracking();
+        
+        if (videoPlayer) {
+            videoPlayer.pause();
+            videoPlayer.innerHTML = '';
+            videoPlayer.load();
+        }
+        
+        if (this.trackControls) {
+            this.trackControls.hide();
+        }
+        
+        this.hideVodVideoPanel();
+        this.currentPlayingMovieId = null;
+        this.currentPlayingMovieInfo = null;
     }
 }

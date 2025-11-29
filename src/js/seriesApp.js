@@ -11,10 +11,11 @@ import { toggleClearButton } from './utils/domHelpers.js';
 import { logger } from './utils/logger.js';
 
 export class SeriesApp {
-    constructor(apiService, storageService, favoritesService) {
+    constructor(apiService, storageService, favoritesService, router = null) {
         this.apiService = apiService;
         this.storageService = storageService;
         this.favoritesService = favoritesService;
+        this.router = router;
         
         // Create separate VideoPlayer instance for series
         this.seriesVideoPlayer = new VideoPlayer();
@@ -35,6 +36,11 @@ export class SeriesApp {
         // Track controls
         this.trackControls = null;
         this.currentEpisodeInfo = null;
+        this.currentSeriesId = null;
+        this.currentEpisodeId = null;
+        
+        // Flag to prevent URL updates during route restoration
+        this.skipUrlUpdate = false;
         
         this.initialized = false;
     }
@@ -102,6 +108,18 @@ export class SeriesApp {
 
         this.seriesInfoPanel.setOnClose(() => {
             this.seriesInfoPanel.hide();
+            this.currentSeriesId = null;
+            
+            // Update URL to remove series
+            if (this.router && !this.skipUrlUpdate) {
+                this.router.navigate({
+                    view: 'series',
+                    categoryId: this.currentCategory,
+                    contentId: null,
+                    episodeId: null,
+                    playing: false
+                });
+            }
         });
 
         // Set up favorites change listener
@@ -265,8 +283,19 @@ export class SeriesApp {
         }
     }
 
-    async handleCategorySelect(categoryId) {
+    async handleCategorySelect(categoryId, skipUrlUpdate = false) {
         this.currentCategory = categoryId;
+        
+        // Update URL (unless skipped during route restoration)
+        if (!skipUrlUpdate && !this.skipUrlUpdate && this.router) {
+            this.router.navigate({
+                view: 'series',
+                categoryId: categoryId,
+                contentId: null,
+                episodeId: null,
+                playing: false
+            });
+        }
         
         // Update category name
         if (categoryId === 'all') {
@@ -350,8 +379,23 @@ export class SeriesApp {
         }
     }
 
-    async handleSeriesClick(seriesId) {
+    async handleSeriesClick(seriesId, skipUrlUpdate = false) {
+        console.log('SeriesApp: handleSeriesClick called, seriesId=', seriesId, 'skipUrlUpdate=', skipUrlUpdate);
         try {
+            this.currentSeriesId = seriesId;
+            
+            // Update URL (unless skipped during route restoration)
+            if (!skipUrlUpdate && !this.skipUrlUpdate && this.router) {
+                this.router.navigate({
+                    view: 'series',
+                    categoryId: this.currentCategory,
+                    contentId: seriesId,
+                    episodeId: null,
+                    playing: false
+                });
+            }
+            
+            console.log('SeriesApp: Showing loading panel');
             this.seriesInfoPanel.showLoading();
             
             let seriesInfo = null;
@@ -359,9 +403,11 @@ export class SeriesApp {
             // Try cache first
             seriesInfo = await this.storageService.getSeriesInfo(seriesId);
             if (seriesInfo) {
+                console.log('SeriesApp: Loaded series info from cache');
                 logger.log(`Loaded series info for ${seriesId} from cache`);
             } else {
                 // Fetch from API
+                console.log('SeriesApp: Fetching series info from API...');
                 logger.log(`Fetching series info for ${seriesId} from API...`);
                 seriesInfo = await this.apiService.getSeriesInfo(seriesId);
                 
@@ -369,17 +415,33 @@ export class SeriesApp {
                 await this.storageService.saveSeriesInfo(seriesId, seriesInfo);
             }
             
+            console.log('SeriesApp: Rendering series info panel');
             this.seriesInfoPanel.render(seriesInfo);
+            console.log('SeriesApp: handleSeriesClick completed successfully');
             
         } catch (error) {
+            console.error('SeriesApp: handleSeriesClick error:', error);
             logger.error('Failed to load series info:', error);
             this.seriesInfoPanel.showError('Failed to load series information. Please try again.');
         }
     }
 
-    async handlePlayEpisode(episodeId, episodeTitle, extension) {
+    async handlePlayEpisode(episodeId, episodeTitle, extension, skipUrlUpdate = false) {
         try {
             logger.log(`Playing episode ${episodeId}: ${episodeTitle} (${extension})`);
+            
+            this.currentEpisodeId = episodeId;
+            
+            // Update URL (unless skipped during route restoration)
+            if (!skipUrlUpdate && !this.skipUrlUpdate && this.router) {
+                this.router.navigate({
+                    view: 'series',
+                    categoryId: this.currentCategory,
+                    contentId: this.currentSeriesId,
+                    episodeId: episodeId,
+                    playing: false
+                });
+            }
             
             // Get episode stream URL
             const streamUrl = await this.apiService.getEpisodeStreamUrl(episodeId, extension);
@@ -587,6 +649,18 @@ export class SeriesApp {
         
         // Reset episode info
         this.currentEpisodeInfo = null;
+        this.currentEpisodeId = null;
+        
+        // Update URL to remove episode (back to series detail)
+        if (this.router && !this.skipUrlUpdate && this.currentSeriesId) {
+            this.router.navigate({
+                view: 'series',
+                categoryId: this.currentCategory,
+                contentId: this.currentSeriesId,
+                episodeId: null,
+                playing: false
+            });
+        }
         
         // Hide video panel
         this.hideSeriesVideoPanel();
@@ -642,17 +716,22 @@ export class SeriesApp {
     }
 
     // Show the series view
-    async show() {
+    async show(skipReset = false) {
+        console.log('SeriesApp: show() called, skipReset=', skipReset);
         const seriesContainer = document.getElementById('seriesContainer');
+        console.log('SeriesApp: seriesContainer found=', !!seriesContainer);
         if (seriesContainer) {
             seriesContainer.style.display = 'flex';
+            console.log('SeriesApp: seriesContainer display set to flex');
         }
         
         // Initialize if not already done
         if (!this.initialized) {
+            console.log('SeriesApp: Not initialized, calling init()');
             await this.init();
-        } else {
-            // If already initialized, ensure "All Series" is selected
+        } else if (!skipReset) {
+            // If already initialized and not restoring route, ensure "All Series" is selected
+            console.log('SeriesApp: Already initialized, resetting to All Series');
             this.categoryList.selectCategory('all');
             this.currentCategory = 'all';
             this.currentCategoryName = 'All Series';
@@ -663,6 +742,8 @@ export class SeriesApp {
             if (rightPanelHeader) {
                 rightPanelHeader.classList.remove('hidden');
             }
+        } else {
+            console.log('SeriesApp: Already initialized, skipReset=true, skipping category reset');
         }
     }
 
@@ -675,5 +756,138 @@ export class SeriesApp {
         
         // Hide series detail panel
         this.seriesInfoPanel.hide();
+    }
+
+    /**
+     * Handle route changes from browser navigation
+     * @param {object} route - The route object
+     */
+    async handleRouteChange(route) {
+        console.log('SeriesApp: handleRouteChange called with:', JSON.stringify(route));
+        logger.log('SeriesApp: Handling route change', route);
+        
+        // Prevent URL updates during route handling
+        this.skipUrlUpdate = true;
+        
+        try {
+            // Handle category change
+            if (route.categoryId && route.categoryId !== this.currentCategory) {
+                console.log('SeriesApp: Changing category to', route.categoryId);
+                this.categoryList.selectCategory(route.categoryId);
+                await this.handleCategorySelect(route.categoryId, true);
+            } else if (!route.categoryId && !route.contentId && this.currentCategory !== 'all') {
+                // Default to 'all' if no category specified
+                console.log('SeriesApp: Defaulting to all category');
+                this.categoryList.selectCategory('all');
+                await this.handleCategorySelect('all', true);
+            }
+            
+            // Handle series detail
+            if (route.contentId) {
+                console.log('SeriesApp: Navigating to series', route.contentId);
+                await this.navigateToSeries(route.contentId);
+                
+                // Handle episode playback
+                if (route.episodeId) {
+                    console.log('SeriesApp: Navigating to episode', route.episodeId);
+                    await this.navigateToEpisode(route.contentId, route.episodeId);
+                }
+            } else {
+                // Close any open panels if no series specified
+                console.log('SeriesApp: No contentId, closing panels');
+                this.seriesInfoPanel.hide();
+                this.closeSeriesVideoSilent();
+                this.currentSeriesId = null;
+                this.currentEpisodeId = null;
+            }
+            
+            console.log('SeriesApp: handleRouteChange completed');
+        } catch (error) {
+            console.error('SeriesApp: Error in handleRouteChange:', error);
+            throw error;
+        } finally {
+            this.skipUrlUpdate = false;
+        }
+    }
+
+    /**
+     * Navigate to a specific series by ID
+     * @param {string} seriesId - The series ID
+     */
+    async navigateToSeries(seriesId) {
+        console.log('SeriesApp: navigateToSeries called with seriesId=', seriesId);
+        logger.log('SeriesApp: Navigating to series', seriesId);
+        this.currentSeriesId = seriesId;
+        
+        // Load and show series info
+        await this.handleSeriesClick(seriesId, true);
+        console.log('SeriesApp: navigateToSeries completed');
+    }
+
+    /**
+     * Navigate to a specific episode
+     * @param {string} seriesId - The series ID
+     * @param {string} episodeId - The episode ID
+     */
+    async navigateToEpisode(seriesId, episodeId) {
+        logger.log('SeriesApp: Navigating to episode', seriesId, episodeId);
+        
+        // Make sure series info is loaded
+        if (!this.seriesInfoPanel.currentSeriesInfo || 
+            String(this.seriesInfoPanel.currentSeriesInfo.info?.id) !== String(seriesId)) {
+            await this.navigateToSeries(seriesId);
+            // Wait a bit for the panel to render
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // Find the episode in the series info
+        const seriesInfo = this.seriesInfoPanel.currentSeriesInfo;
+        if (!seriesInfo || !seriesInfo.episodes) {
+            logger.warn('Series info not loaded, cannot navigate to episode');
+            return;
+        }
+        
+        // Search through all seasons for this episode
+        let episodeData = null;
+        for (const seasonKey in seriesInfo.episodes) {
+            const seasonEpisodes = seriesInfo.episodes[seasonKey] || [];
+            const episode = seasonEpisodes.find(ep => 
+                String(ep.id) === String(episodeId) || 
+                String(ep.episode_id) === String(episodeId)
+            );
+            if (episode) {
+                episodeData = episode;
+                break;
+            }
+        }
+        
+        if (episodeData) {
+            const episodeTitle = episodeData.title || `Episode ${episodeData.episode_num || episodeId}`;
+            const extension = episodeData.container_extension || 'mkv';
+            await this.handlePlayEpisode(episodeId, episodeTitle, extension, true);
+        } else {
+            logger.warn(`Episode ${episodeId} not found in series ${seriesId}`);
+        }
+    }
+
+    /**
+     * Close video without updating URL (for route restoration)
+     */
+    closeSeriesVideoSilent() {
+        const videoPlayer = document.getElementById(this.seriesVideoElementIds.videoPlayer);
+        
+        if (videoPlayer) {
+            videoPlayer.pause();
+            videoPlayer.innerHTML = '';
+            videoPlayer.load();
+        }
+        
+        if (this.trackControls) {
+            this.trackControls.hide();
+        }
+        
+        this.currentEpisodeInfo = null;
+        this.currentEpisodeId = null;
+        this.hideSeriesVideoPanel();
     }
 }
