@@ -11,6 +11,7 @@ export class SeriesInfoPanel {
         this.onClose = null; // Callback for close
         this.favoritesService = null;
         this.onFavoriteToggle = null;
+        this.onViewInCategory = null;
     }
 
     setOnPlayEpisode(callback) {
@@ -29,6 +30,10 @@ export class SeriesInfoPanel {
         this.onFavoriteToggle = callback;
     }
 
+    setOnViewInCategory(callback) {
+        this.onViewInCategory = callback;
+    }
+
     show() {
         this.container.style.display = 'flex';
     }
@@ -38,9 +43,10 @@ export class SeriesInfoPanel {
         this.currentSeriesInfo = null;
     }
 
-    render(seriesInfo) {
+    render(seriesInfo, options = {}) {
         this.currentSeriesInfo = seriesInfo;
-        
+        const categoryEntries = options.categoryEntries || [];
+
         const info = seriesInfo.info || {};
         let seasons = seriesInfo.seasons || [];
         const episodes = seriesInfo.episodes || {};
@@ -89,6 +95,25 @@ export class SeriesInfoPanel {
         const starIcon = isFavorite ? '★' : '☆';
         const starClass = isFavorite ? 'favorited' : '';
 
+        const categoryRowHtml =
+            categoryEntries.length > 0
+                ? (() => {
+                      const label = categoryEntries.length > 1 ? 'Categories' : 'Category';
+                      const items = categoryEntries.map((e) => {
+                          const idAttr = escapeHtml(e.categoryId);
+                          if (e.resolved && e.categoryName) {
+                              return `<button type="button" class="series-detail-category-view" data-category-id="${idAttr}" title="Category ID ${idAttr}">${escapeHtml(e.categoryName)}</button>`;
+                          }
+                          return `<span class="series-detail-category-unknown" title="ID not in loaded category list">ID ${idAttr} <span class="series-detail-category-unknown-note">(unknown)</span></span>`;
+                      });
+                      return `
+            <div class="series-detail-category-row">
+                <span class="series-detail-category-label">${label}:</span>
+                <span class="series-detail-category-chips">${items.join('<span class="series-detail-category-sep">·</span>')}</span>
+            </div>`;
+                  })()
+                : '';
+
         let html = `
             <div class="series-detail-header" ${backdropUrl ? `style="background-image: linear-gradient(to bottom, rgba(0,0,0,0.3), rgba(0,0,0,0.9)), url('${escapeHtml(backdropUrl)}');"` : ''}>
                 <div class="series-detail-header-content">
@@ -103,6 +128,7 @@ export class SeriesInfoPanel {
                                 </button>
                             </h2>
                             ${info.genre ? `<div class="series-detail-genre">${escapeHtml(info.genre)}</div>` : ''}
+                            ${categoryRowHtml}
                             <div class="series-detail-meta">
                                 ${info.releaseDate ? `<span>${escapeHtml(info.releaseDate)}</span>` : ''}
                                 ${info.rating ? `<span>⭐ ${escapeHtml(info.rating)}</span>` : ''}
@@ -201,6 +227,16 @@ export class SeriesInfoPanel {
                 }
             });
         }
+
+        // Jump to category (XTREAM category list)
+        this.container.querySelectorAll('.series-detail-category-view').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const id = btn.dataset.categoryId;
+                if (id && this.onViewInCategory) {
+                    this.onViewInCategory(id);
+                }
+            });
+        });
 
         // Favorite button
         const favoriteBtn = this.container.querySelector('.series-detail-favorite');

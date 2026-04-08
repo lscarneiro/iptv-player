@@ -27,6 +27,8 @@ export class SeriesApp {
         this.currentCategory = null;
         this.currentCategoryName = 'All Series';
         this.allSeries = [];
+        /** @type {Map<string, Set<string>>} series_id -> category_id strings (from per-category loads) */
+        this.seriesCategoryIndex = new Map();
         
         // Request tracking for preventing race conditions
         this.currentCategoryLoadId = 0;
@@ -102,6 +104,11 @@ export class SeriesApp {
 
         this.seriesInfoPanel.setOnClose(() => {
             this.seriesInfoPanel.hide();
+        });
+
+        this.seriesInfoPanel.setOnViewInCategory((categoryId) => {
+            this.seriesInfoPanel.hide();
+            this.handleCategorySelect(categoryId);
         });
 
         // Set up favorites change listener
@@ -341,13 +348,82 @@ export class SeriesApp {
                 logger.log('Series load outdated, skipping');
                 return;
             }
-            
+
+            // Incremental index: remember which categories each series appeared under (browse path)
+            if (
+                this.currentCategory &&
+                this.currentCategory !== 'all' &&
+                this.currentCategory !== 'favorites'
+            ) {
+                const catKey = String(this.currentCategory);
+                for (const s of series) {
+                    const sid = String(s.series_id);
+                    if (!this.seriesCategoryIndex.has(sid)) {
+                        this.seriesCategoryIndex.set(sid, new Set());
+                    }
+                    this.seriesCategoryIndex.get(sid).add(catKey);
+                }
+            }
+
             this.seriesList.render(series, this.currentCategoryName);
             
         } catch (error) {
             logger.error('Failed to load series:', error);
             this.seriesList.showError('Failed to load series. Please try again.');
         }
+    }
+
+    /**
+     * Resolve XTREAM category_id(s) for a series: get_series_info.info, all_series row,
+     * and incremental index from per-category browsing. Maps ids to names from this.categories.
+     */
+    resolveSeriesCategoryEntries(seriesId, seriesInfo) {
+        const idSet = new Set();
+        const info = seriesInfo?.info || {};
+
+        const addId = (v) => {
+            if (v !== undefined && v !== null && v !== '') {
+                idSet.add(String(v));
+            }
+        };
+
+        addId(info.category_id);
+
+        const row = this.allSeries.find((s) => String(s.series_id) === String(seriesId));
+        if (row) {
+            addId(row.category_id);
+        }
+
+        const fromBrowse = this.seriesCategoryIndex.get(String(seriesId));
+        if (fromBrowse) {
+            fromBrowse.forEach((id) => addId(id));
+        }
+
+        if (idSet.size === 0) {
+            logger.log(
+                `Series ${seriesId}: no category_id from info, all_series row, or browse index`
+            );
+            return [];
+        }
+
+        const entries = [];
+        for (const id of idSet) {
+            const cat = this.categories.find((c) => String(c.category_id) === id);
+            entries.push({
+                categoryId: id,
+                categoryName: cat ? cat.category_name : null,
+                resolved: !!cat
+            });
+        }
+
+        entries.sort((a, b) => {
+            const ka = (a.categoryName || a.categoryId).toLowerCase();
+            const kb = (b.categoryName || b.categoryId).toLowerCase();
+            return ka.localeCompare(kb);
+        });
+
+        logger.log(`Series ${seriesId} category entries:`, entries);
+        return entries;
     }
 
     async handleSeriesClick(seriesId) {
@@ -369,7 +445,8 @@ export class SeriesApp {
                 await this.storageService.saveSeriesInfo(seriesId, seriesInfo);
             }
             
-            this.seriesInfoPanel.render(seriesInfo);
+            const categoryEntries = this.resolveSeriesCategoryEntries(seriesId, seriesInfo);
+            this.seriesInfoPanel.render(seriesInfo, { categoryEntries });
             
         } catch (error) {
             logger.error('Failed to load series info:', error);

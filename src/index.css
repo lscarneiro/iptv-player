@@ -3156,6 +3156,60 @@ body.video-fullscreen .video-player-large {
     margin-bottom: 0.5rem;
 }
 
+.series-detail-category-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.75rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
+
+.series-detail-category-label {
+    color: #aaa;
+    font-weight: 600;
+}
+
+.series-detail-category-chips {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.5rem;
+    color: #ddd;
+}
+
+.series-detail-category-sep {
+    color: #666;
+    user-select: none;
+}
+
+.series-detail-category-view {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    color: #9cf;
+    cursor: pointer;
+    font-size: inherit;
+    padding: 0.2rem 0.55rem;
+    text-align: left;
+}
+
+.series-detail-category-view:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: #bdf;
+}
+
+.series-detail-category-unknown {
+    color: #888;
+}
+
+.series-detail-category-unknown-note {
+    color: #666;
+    font-size: 0.9em;
+}
+
 .series-detail-meta {
     display: flex;
     gap: 1.5rem;
